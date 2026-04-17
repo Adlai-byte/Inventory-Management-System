@@ -1,0 +1,47 @@
+.git
+.gitignore
+
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+out
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Environment files (use .env.docker for Docker deployment)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Testing
+coverage
+playwright-report
+test-results
+
+# Misc
+*.tsbuildinfo
+next-env.d.ts
+
+# Scripts (not needed for production build)
+scripts

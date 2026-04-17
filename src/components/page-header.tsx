@@ -1,4 +1,5 @@
-import { cn } from "@/lib/utils";
+"use client";
+
 import { LucideIcon } from "lucide-react";
 
 interface PageHeaderProps {

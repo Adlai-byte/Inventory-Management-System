@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,36 +17,40 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: "" });
-  const supabase = createClient();
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-        if (data) {
-          setProfile(data);
-          setForm({ full_name: data.full_name || "" });
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setProfile(data.user);
+          setForm({ full_name: data.user.full_name || "" });
         }
       }
       setLoading(false);
     };
     fetchProfile();
-  }, [supabase]);
+  }, []);
 
   const handleUpdateProfile = async () => {
     if (!profile) return;
+    if (!confirm("Save changes to your profile?")) return;
+    
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ full_name: form.full_name })
-        .eq("id", profile.id);
-      if (error) throw error;
+      const res = await fetch("/api/auth/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: form.full_name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       toast.success("Profile updated successfully");
       setProfile({ ...profile, full_name: form.full_name });
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to update profile";
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -145,11 +148,11 @@ export default function SettingsPage() {
         <CardContent className="p-6">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-chart-3 flex items-center justify-center">
-              <span className="text-white font-bold">I</span>
+              <span className="text-white font-bold">B</span>
             </div>
             <div>
-              <p className="font-semibold">InvenPro</p>
-              <p className="text-xs text-muted-foreground">Advanced Inventory Management System v1.0</p>
+              <p className="font-semibold">BASTISTIL Minimart</p>
+              <p className="text-xs text-muted-foreground">Inventory Management System v1.0</p>
             </div>
           </div>
         </CardContent>

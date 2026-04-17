@@ -1,110 +1,111 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useState } from "react";
+import { formatCurrency } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  BarChart3,
-  Download,
-  Package,
   AlertTriangle,
-  DollarSign,
-  TrendingUp,
+  BarChart3,
+  Calendar,
+  Download,
+  Eye,
+  EyeOff,
+  FileText,
   Loader2,
+  Package,
+  PieChart,
+  ShoppingCart,
+  TrendingUp,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
+import { useReportsData } from "@/components/reports/use-reports-data";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import type { Product } from "@/lib/types";
+  exportCategoryPDF,
+  exportInventoryPDF,
+  exportLowStockCSV,
+  exportLowStockPDF,
+  exportDispatchCSV,
+  exportDispatchPDF,
+} from "@/components/reports/exporters";
+
+const CATEGORY_COLORS = [
+  "#10b981",
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ef4444",
+  "#06b6d4",
+  "#ec4899",
+  "#84cc16",
+  "#f97316",
+  "#14b8a6",
+];
 
 export default function ReportsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const {
+    summary,
+    loading,
+    activeTab,
+    setActiveTab,
+    outboundData,
+    outboundSummary,
+    topDispatchedProducts,
+    outboundLoading,
+    topProducts,
+    lowStockProducts,
+    categoryData,
+    tabLoading,
+    selectedPeriod,
+    setSelectedPeriod,
+    selectedDate,
+    setSelectedDate,
+    selectedMonth,
+    setSelectedMonth,
+  } = useReportsData();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const { data } = await supabase
-        .from("products")
-        .select("*, category:categories(name), supplier:suppliers(name)")
-        .order("name");
-      if (data) setProducts(data);
-      setLoading(false);
-    };
-    fetchData();
-  }, [supabase]);
+  const [showCostValue, setShowCostValue] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("reports_show_cost") !== "false";
+    }
+    return true;
+  });
 
-  const lowStockProducts = products.filter(
-    (p) => p.quantity <= p.min_stock_level && p.status === "active"
-  );
-
-  const totalValue = products.reduce(
-    (sum, p) => sum + p.quantity * p.unit_price,
-    0
-  );
-
-  const totalCostValue = products.reduce(
-    (sum, p) => sum + p.quantity * p.cost_price,
-    0
-  );
-
-  const topProducts = [...products]
-    .sort((a, b) => b.quantity * b.unit_price - a.quantity * a.unit_price)
-    .slice(0, 10);
-
-  const categoryValues = products.reduce((acc, p) => {
-    const cat = p.category?.name || "Uncategorized";
-    acc[cat] = (acc[cat] || 0) + p.quantity * p.unit_price;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const categoryChartData = Object.entries(categoryValues)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
-
-  const exportToCSV = (data: any[], filename: string) => {
-    if (data.length === 0) return;
-    const headers = Object.keys(data[0]);
-    const csvContent = [
-      headers.join(","),
-      ...data.map((row) => headers.map((h) => `"${row[h] ?? ""}"`).join(",")),
-    ].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${filename}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const toggleCostValue = () => {
+    setShowCostValue((prev) => {
+      const next = !prev;
+      localStorage.setItem("reports_show_cost", String(next));
+      return next;
+    });
   };
 
-  const exportInventoryCSV = () => {
-    exportToCSV(
-      products.map((p) => ({
-        Name: p.name,
-        SKU: p.sku,
-        Category: p.category?.name || "",
-        Quantity: p.quantity,
-        "Unit Price": p.unit_price,
-        "Cost Price": p.cost_price,
-        "Total Value": p.quantity * p.unit_price,
-        Status: p.status,
-      })),
-      "inventory-report"
-    );
-  };
+  const outboundChartData = outboundData.map((d) => ({
+    name:
+      selectedPeriod === "daily"
+        ? `${d.hour}:00`
+        : selectedPeriod === "monthly"
+          ? `Day ${d.day}`
+          : d.period?.slice(5) || d.period,
+    items: d.total_items || 0,
+    transfers: d.transfer_count || 0,
+  }));
+
+  const topDispatchedChartData = topDispatchedProducts.slice(0, 5).map((p) => ({
+    name: p.name.length > 15 ? `${p.name.substring(0, 15)}...` : p.name,
+    value: p.quantity_dispatched,
+  }));
+
+  const categoryChartData = categoryData.slice(0, 10).map((c) => ({
+    name: c.category.length > 12 ? `${c.category.substring(0, 12)}...` : c.category,
+    value: c.total_value,
+    count: c.product_count,
+  }));
 
   if (loading) {
     return (
@@ -116,42 +117,28 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Reports & Analytics"
-        description="Comprehensive inventory insights"
-        icon={BarChart3}
-      >
-        <Button onClick={exportInventoryCSV} variant="outline" className="gap-2">
-          <Download className="h-4 w-4" />
-          Export CSV
-        </Button>
-      </PageHeader>
+      <PageHeader title="Reports & Analytics" description="Inventory insights and analytics" icon={BarChart3} />
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Retail Value</p>
-                <p className="text-xl font-bold">{formatCurrency(totalValue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 text-blue-500" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Cost Value</p>
-                <p className="text-xl font-bold">{formatCurrency(totalCostValue)}</p>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Cost Value</p>
+                <p className="text-xl font-bold tracking-tight">
+                  {showCostValue ? formatCurrency(summary?.totalCostValue || 0) : "••••••"}
+                </p>
               </div>
+              <button
+                onClick={toggleCostValue}
+                className="ml-auto h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title={showCostValue ? "Hide cost value" : "Show cost value"}
+              >
+                {showCostValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -162,8 +149,8 @@ export default function ReportsPage() {
                 <Package className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Products</p>
-                <p className="text-xl font-bold">{products.length}</p>
+                <p className="text-xs text-muted-foreground">Products</p>
+                <p className="text-xl font-bold">{summary?.totalProducts || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -175,179 +162,392 @@ export default function ReportsPage() {
                 <AlertTriangle className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Low Stock Items</p>
-                <p className="text-xl font-bold">{lowStockProducts.length}</p>
+                <p className="text-xs text-muted-foreground">Low Stock</p>
+                <p className="text-xl font-bold">{summary?.lowStockCount || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="valuation" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="valuation">Inventory Valuation</TabsTrigger>
-          <TabsTrigger value="lowstock">Low Stock</TabsTrigger>
-          <TabsTrigger value="top">Top Products</TabsTrigger>
-          <TabsTrigger value="category">By Category</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="h-12">
+          <TabsTrigger value="outbound" className="h-10 px-5">
+            Outbound Activity
+          </TabsTrigger>
+          <TabsTrigger value="valuation" className="h-10 px-5">
+            Inventory
+          </TabsTrigger>
+          <TabsTrigger value="lowstock" className="h-10 px-5">
+            Low Stock
+          </TabsTrigger>
+          <TabsTrigger value="category" className="h-10 px-5">
+            Category
+          </TabsTrigger>
         </TabsList>
 
-        {/* Inventory Valuation */}
+        <TabsContent value="outbound">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Dispatch Report</CardTitle>
+                    <CardDescription>Track outbound movement trends</CardDescription>
+                  </div>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <Select value={selectedPeriod} onValueChange={(v: string | null) => setSelectedPeriod(v ?? "daily")}>
+                      <SelectTrigger className="w-[130px] h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {selectedPeriod === "daily" && (
+                      <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-[140px] h-11" />
+                    )}
+                    {selectedPeriod === "monthly" && (
+                      <Input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-[140px] h-11" />
+                    )}
+                    <Button variant="outline" onClick={() => exportDispatchCSV(outboundData, selectedPeriod)} className="gap-2 h-11 px-4">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => exportDispatchPDF(outboundData, outboundSummary, topDispatchedProducts, selectedPeriod)}
+                      className="gap-2 h-11 px-4"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                      <ShoppingCart className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Items Dispatched</p>
+                      <p className="text-xl font-bold">{outboundSummary.total_items_dispatched.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                      <Calendar className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Transfer Operations</p>
+                      <p className="text-xl font-bold">{outboundSummary.total_transfers.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Dispatch Trend (Items)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    {outboundLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={outboundChartData}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                          <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                          <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                          />
+                          <Line type="monotone" dataKey="items" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", strokeWidth: 2 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Dispatched Items</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    {outboundLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : topDispatchedProducts.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={topDispatchedChartData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                          <XAxis type="number" tick={{ fill: "#94a3b8" }} />
+                          <YAxis type="category" dataKey="name" width={80} tick={{ fill: "#94a3b8", fontSize: 10 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                          />
+                          <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                        <PieChart className="h-10 w-10 mb-2 opacity-50" />
+                        <p className="text-sm">No dispatch data</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Highest Volume Dispatches</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">Qty Dispatched</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topDispatchedProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                          No dispatch data for this period
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      topDispatchedProducts.map((p, i) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-bold text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{p.category_name || "-"}</TableCell>
+                          <TableCell className="text-right font-semibold">{p.quantity_dispatched}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="valuation">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Inventory Valuation Report</CardTitle>
-              <CardDescription>Complete inventory with values</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Cost Price</TableHead>
-                    <TableHead className="text-right">Total Value</TableHead>
-                    <TableHead className="text-right">Profit Margin</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((p) => {
-                    const margin = p.unit_price > 0 ? ((p.unit_price - p.cost_price) / p.unit_price) * 100 : 0;
-                    return (
+          {tabLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle className="text-base">Top Products by Value</CardTitle>
+                <Button variant="outline" onClick={() => exportInventoryPDF(topProducts, summary)} className="gap-2 h-10">
+                  <FileText className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Cost Price</TableHead>
+                      <TableHead className="text-right">Total Cost Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topProducts.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                        <TableCell className="text-sm">{p.category?.name || "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.category_name || "-"}</TableCell>
                         <TableCell className="text-right">{p.quantity}</TableCell>
                         <TableCell className="text-right">{formatCurrency(p.unit_price)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(p.cost_price)}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(p.quantity * p.unit_price)}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge className={margin > 30 ? "bg-emerald-500/10 text-emerald-600" : margin > 15 ? "bg-amber-500/10 text-amber-600" : "bg-red-500/10 text-red-600"}>
-                            {margin.toFixed(1)}%
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(p.total_value)}</TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Low Stock */}
         <TabsContent value="lowstock">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Low Stock Alert Report</CardTitle>
-              <CardDescription>Products at or below minimum stock level</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead className="text-right">Current Qty</TableHead>
-                    <TableHead className="text-right">Min Level</TableHead>
-                    <TableHead className="text-right">Deficit</TableHead>
-                    <TableHead>Supplier</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lowStockProducts.length === 0 ? (
+          {tabLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Low Stock Alert</CardTitle>
+                  <CardDescription>{lowStockProducts.length} items need restocking</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => exportLowStockCSV(lowStockProducts)} className="gap-2 h-10">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={() => exportLowStockPDF(lowStockProducts)} className="gap-2 h-10">
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center h-32 text-muted-foreground">
-                        All products are above minimum stock levels 🎉
-                      </TableCell>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Current</TableHead>
+                      <TableHead className="text-right">Min Level</TableHead>
+                      <TableHead className="text-right">Deficit</TableHead>
+                      <TableHead>Supplier</TableHead>
                     </TableRow>
-                  ) : (
-                    lowStockProducts.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={p.quantity === 0 ? "destructive" : "secondary"}>
-                            {p.quantity}
-                          </Badge>
+                  </TableHeader>
+                  <TableBody>
+                    {lowStockProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                          All products are above minimum stock levels
                         </TableCell>
-                        <TableCell className="text-right">{p.min_stock_level}</TableCell>
-                        <TableCell className="text-right text-destructive font-semibold">
-                          -{p.min_stock_level - p.quantity}
-                        </TableCell>
-                        <TableCell className="text-sm">{p.supplier?.name || "—"}</TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ) : (
+                      lowStockProducts.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={p.quantity === 0 ? "destructive" : "secondary"}>{p.quantity}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{p.min_stock_level}</TableCell>
+                          <TableCell className="text-right text-destructive font-semibold">-{p.min_stock_level - p.quantity}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{p.supplier_name || "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Top Products */}
-        <TabsContent value="top">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Top Products by Value</CardTitle>
-              <CardDescription>Highest value products in inventory</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topProducts.map((p, i) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-bold text-muted-foreground">{i + 1}</TableCell>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="text-sm">{p.category?.name || "—"}</TableCell>
-                      <TableCell className="text-right">{p.quantity}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(p.unit_price)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatCurrency(p.quantity * p.unit_price)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* By Category */}
         <TabsContent value="category">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Value by Category</CardTitle>
-              <CardDescription>Inventory value breakdown by category</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryChartData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                    <YAxis type="category" dataKey="name" width={120} tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }}
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                    <Bar dataKey="value" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          {tabLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => exportCategoryPDF(categoryData)} className="gap-2 h-10">
+                  <FileText className="h-4 w-4" />
+                  Export PDF
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Value by Category</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[350px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={categoryChartData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                          <XAxis type="number" tick={{ fill: "#94a3b8" }} tickFormatter={(v) => `PHP ${(v / 1000).toFixed(0)}k`} />
+                          <YAxis type="category" dataKey="name" width={100} tick={{ fill: "#94a3b8", fontSize: 10 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                            formatter={(value: number) => formatCurrency(value)}
+                          />
+                          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                            {categoryChartData.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-wrap gap-3 justify-center mt-4">
+                      {categoryData.slice(0, 6).map((cat, i) => (
+                        <div key={cat.category} className="flex items-center gap-1.5 text-xs">
+                          <div className="h-3 w-3 rounded" style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                          <span className="text-slate-400 dark:text-slate-400">{cat.category}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Category Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Products</TableHead>
+                          <TableHead className="text-right">Value</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {categoryData.map((c, i) => (
+                          <TableRow key={c.category}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <div className="h-3 w-3 rounded" style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                                {c.category}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">{c.product_count}</TableCell>
+                            <TableCell className="text-right font-semibold">{formatCurrency(c.total_value)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

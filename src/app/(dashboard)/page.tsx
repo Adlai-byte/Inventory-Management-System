@@ -1,21 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { formatCurrency } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { useHasMounted } from "@/lib/use-has-mounted";
 import { StatsCard } from "@/components/stats-card";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   Package,
   AlertTriangle,
-  DollarSign,
   ShoppingCart,
   TrendingUp,
-  ArrowDownRight,
   ArrowUpRight,
+  Loader2,
+  Activity,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 import {
   BarChart,
@@ -28,171 +29,74 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
-  Area,
-  AreaChart,
+
 } from "recharts";
 
 const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+  "#10b981", // emerald
+  "#3b82f6", // blue
+  "#f59e0b", // amber
+  "#8b5cf6", // violet
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
 ];
 
-interface DashboardStats {
+interface DashboardData {
   totalProducts: number;
   lowStockCount: number;
-  totalValue: number;
-  pendingOrders: number;
-}
-
-interface CategoryData {
-  name: string;
-  count: number;
-}
-
-interface MovementData {
-  date: string;
-  inbound: number;
-  outbound: number;
-}
-
-interface RecentActivity {
-  id: string;
-  action: string;
-  entity_type: string;
-  details: string | null;
-  created_at: string;
+  outOfStockCount: number;
+  totalCostValue: number;
+  pendingOrdersCount: number;
+  expiringCount: number;
+  expiredCount: number;
+  categories: { name: string; count: number }[];
+  movements: { date: string; incoming: number; outgoing: number }[];
+  movementTypes: { type: string; count: number; quantity: number }[];
+  activity: { id: number; action: string; entity_type: string; details: string | null; created_at: string; user_name?: string }[];
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
+  const router = useRouter();
+  const [data, setData] = useState<DashboardData>({
     totalProducts: 0,
     lowStockCount: 0,
-    totalValue: 0,
-    pendingOrders: 0,
+    outOfStockCount: 0,
+    totalCostValue: 0,
+    pendingOrdersCount: 0,
+    expiringCount: 0,
+    expiredCount: 0,
+    categories: [],
+    movements: [],
+    movementTypes: [],
+    activity: [],
   });
-  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
-  const [movementData, setMovementData] = useState<MovementData[]>([]);
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const hasMounted = useHasMounted();
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        // Fetch products stats
-        const { data: products } = await supabase.from("products").select("*");
-        if (products) {
-          const totalProducts = products.length;
-          const lowStockCount = products.filter(
-            (p) => p.quantity <= p.min_stock_level && p.status === "active"
-          ).length;
-          const totalValue = products.reduce(
-            (sum, p) => sum + p.quantity * p.unit_price,
-            0
-          );
-          setStats((prev) => ({ ...prev, totalProducts, lowStockCount, totalValue }));
+        const res = await fetch("/api/dashboard");
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
         }
-
-        // Fetch pending orders
-        const { count: pendingOrders } = await supabase
-          .from("purchase_orders")
-          .select("*", { count: "exact", head: true })
-          .in("status", ["draft", "pending"]);
-        setStats((prev) => ({ ...prev, pendingOrders: pendingOrders || 0 }));
-
-        // Fetch category distribution
-        const { data: cats } = await supabase
-          .from("products")
-          .select("category:categories(name)");
-        if (cats) {
-          const catCounts: Record<string, number> = {};
-          cats.forEach((p: any) => {
-            const name = p.category?.name || "Uncategorized";
-            catCounts[name] = (catCounts[name] || 0) + 1;
-          });
-          setCategoryData(
-            Object.entries(catCounts).map(([name, count]) => ({ name, count }))
-          );
-        }
-
-        // Fetch recent movements for chart
-        const { data: movements } = await supabase
-          .from("stock_movements")
-          .select("*")
-          .order("created_at", { ascending: true })
-          .limit(100);
-        if (movements && movements.length > 0) {
-          const grouped: Record<string, { inbound: number; outbound: number }> = {};
-          movements.forEach((m) => {
-            const date = new Date(m.created_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            });
-            if (!grouped[date]) grouped[date] = { inbound: 0, outbound: 0 };
-            if (m.type === "inbound") grouped[date].inbound += m.quantity;
-            if (m.type === "outbound") grouped[date].outbound += m.quantity;
-          });
-          setMovementData(
-            Object.entries(grouped).map(([date, data]) => ({ date, ...data }))
-          );
-        }
-
-        // Fetch recent activity
-        const { data: activity } = await supabase
-          .from("activity_log")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(5);
-        if (activity) setRecentActivity(activity);
       } catch (error) {
         console.error("Dashboard fetch error:", error);
-      } finally {
-        setLoading(false);
       }
     };
 
     fetchDashboard();
-  }, [supabase]);
+  }, []);
 
-  // Demo data for charts when database is empty
-  const demoMovementData = movementData.length > 0 ? movementData : [
-    { date: "Mon", inbound: 24, outbound: 18 },
-    { date: "Tue", inbound: 13, outbound: 22 },
-    { date: "Wed", inbound: 38, outbound: 12 },
-    { date: "Thu", inbound: 20, outbound: 29 },
-    { date: "Fri", inbound: 45, outbound: 15 },
-    { date: "Sat", inbound: 32, outbound: 8 },
-    { date: "Sun", inbound: 10, outbound: 5 },
-  ];
-
-  const demoCategoryData = categoryData.length > 0 ? categoryData : [
-    { name: "Electronics", count: 42 },
-    { name: "Furniture", count: 28 },
-    { name: "Clothing", count: 35 },
-    { name: "Food", count: 21 },
-    { name: "Other", count: 14 },
-  ];
-
-  const demoStockTrend = [
-    { day: "Week 1", stock: 820 },
-    { day: "Week 2", stock: 932 },
-    { day: "Week 3", stock: 901 },
-    { day: "Week 4", stock: 1034 },
-    { day: "Week 5", stock: 1290 },
-    { day: "Week 6", stock: 1170 },
-    { day: "Week 7", stock: 1350 },
-  ];
+  const movementData = data.movements.length > 0 ? data.movements : [];
+  const categoryData = data.categories.length > 0 ? data.categories : [];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Overview of your inventory performance"
+        description="Inventory management overview"
         icon={LayoutDashboard}
       />
 
@@ -200,29 +104,69 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Total Products"
-          value={stats.totalProducts || 156}
+          value={data.totalProducts || 0}
           icon={Package}
-          trend={{ value: 12.5, label: "from last month" }}
+          iconColor="emerald"
         />
         <StatsCard
           title="Low Stock Alerts"
-          value={stats.lowStockCount || 8}
+          value={data.lowStockCount || 0}
           icon={AlertTriangle}
-          trend={{ value: -3.2, label: "from last week" }}
-        />
-        <StatsCard
-          title="Inventory Value"
-          value={formatCurrency(stats.totalValue || 245680)}
-          icon={DollarSign}
-          trend={{ value: 8.1, label: "from last month" }}
+          iconColor="amber"
+          className="cursor-pointer hover:ring-2 hover:ring-amber-500/50"
+          onClick={() => router.push("/alerts")}
         />
         <StatsCard
           title="Pending Orders"
-          value={stats.pendingOrders || 12}
+          value={data.pendingOrdersCount || 0}
           icon={ShoppingCart}
-          trend={{ value: 5.4, label: "from last week" }}
+          iconColor="purple"
+          className="cursor-pointer hover:ring-2 hover:ring-purple-500/50"
+          onClick={() => router.push("/purchase-orders")}
+        />
+        <StatsCard
+          title="Out of Stock"
+          value={data.outOfStockCount || 0}
+          icon={AlertCircle}
+          iconColor="red"
         />
       </div>
+
+      {/* Alert Cards */}
+      {(data.expiredCount > 0 || data.expiringCount > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {data.expiredCount > 0 && (
+            <Card className="border-red-500/50 bg-red-500/5">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Expired Products</p>
+                    <p className="text-2xl font-bold text-red-500">{data.expiredCount}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {data.expiringCount > 0 && (
+            <Card className="border-orange-500/50 bg-orange-500/5">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Expiring Soon</p>
+                    <p className="text-2xl font-bold text-orange-500">{data.expiringCount}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid gap-4 lg:grid-cols-7">
@@ -230,15 +174,15 @@ export default function DashboardPage() {
         <Card className="lg:col-span-4">
           <CardHeader>
             <CardTitle className="text-base font-semibold">Stock Movements</CardTitle>
-            <CardDescription>Inbound vs Outbound activity over time</CardDescription>
+            <CardDescription>Incoming vs Outgoing activity (last 30 days)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={demoMovementData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <BarChart data={movementData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "#94a3b8" }} />
+                  <YAxis className="text-xs" tick={{ fill: "#94a3b8" }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "hsl(var(--card))",
@@ -247,8 +191,8 @@ export default function DashboardPage() {
                       color: "hsl(var(--foreground))",
                     }}
                   />
-                  <Bar dataKey="inbound" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} name="Inbound" />
-                  <Bar dataKey="outbound" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} name="Outbound" />
+                  <Bar dataKey="incoming" fill="#10b981" radius={[4, 4, 0, 0]} name="Incoming" />
+                  <Bar dataKey="outgoing" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Outgoing" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -259,14 +203,14 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-base font-semibold">Category Distribution</CardTitle>
-            <CardDescription>Products by category breakdown</CardDescription>
+            <CardDescription>Products by category</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={demoCategoryData}
+                    data={categoryData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -275,7 +219,7 @@ export default function DashboardPage() {
                     dataKey="count"
                     nameKey="name"
                   >
-                    {demoCategoryData.map((_, index) => (
+                    {categoryData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
                   </Pie>
@@ -292,7 +236,7 @@ export default function DashboardPage() {
             </div>
             {/* Legend */}
             <div className="flex flex-wrap gap-3 justify-center mt-2">
-              {demoCategoryData.map((cat, i) => (
+              {categoryData.slice(0, 5).map((cat, i) => (
                 <div key={cat.name} className="flex items-center gap-1.5 text-xs">
                   <div
                     className="h-2.5 w-2.5 rounded-full"
@@ -306,45 +250,41 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Stock Trend & Recent Activity */}
+      {/* Movement Types & Recent Activity */}
       <div className="grid gap-4 lg:grid-cols-7">
-        {/* Stock Trend */}
+        {/* Movement Types */}
         <Card className="lg:col-span-4">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Stock Level Trend</CardTitle>
-            <CardDescription>Total inventory units over time</CardDescription>
+            <CardTitle className="text-base font-semibold">Movement Types (Last 7 Days)</CardTitle>
+            <CardDescription>Breakdown by movement category</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={demoStockTrend}>
-                  <defs>
-                    <linearGradient id="stockGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="day" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      color: "hsl(var(--foreground))",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="stock"
-                    stroke="hsl(var(--chart-1))"
-                    fill="url(#stockGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {data.movementTypes.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground">
+                No recent movements
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.movementTypes.map((item) => {
+                  const isIncoming = ["restock", "transfer_in", "initial"].includes(item.type);
+                  const color = isIncoming ? "text-emerald-500" : 
+                    ["damage", "expired", "loss"].includes(item.type) ? "text-red-500" : 
+                    "text-amber-500";
+                  return (
+                    <div key={item.type} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-3 w-3 rounded-full ${color.replace('text-', 'bg-')}`} />
+                        <span className="font-medium capitalize">{item.type.replace("_", " ")}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-muted-foreground">{item.count} movements</span>
+                        <span className="font-medium">{item.quantity} units</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -355,43 +295,45 @@ export default function DashboardPage() {
             <CardDescription>Latest system events</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {(recentActivity.length > 0
-                ? recentActivity
-                : [
-                    { id: "1", action: "Product Created", entity_type: "product", details: "Added 'Wireless Mouse'", created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
-                    { id: "2", action: "Stock Inbound", entity_type: "stock", details: "+50 units of Keyboard", created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
-                    { id: "3", action: "Order Created", entity_type: "order", details: "PO-2024-001 submitted", created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString() },
-                    { id: "4", action: "Low Stock Alert", entity_type: "alert", details: "USB Cable below minimum", created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString() },
-                    { id: "5", action: "Category Updated", entity_type: "category", details: "Renamed to Electronics", created_at: new Date(Date.now() - 1000 * 60 * 180).toISOString() },
-                  ]
-              ).map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    {item.entity_type === "product" && <Package className="h-3.5 w-3.5 text-primary" />}
-                    {item.entity_type === "stock" && <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />}
-                    {item.entity_type === "order" && <ShoppingCart className="h-3.5 w-3.5 text-blue-500" />}
-                    {item.entity_type === "alert" && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                    {item.entity_type === "category" && <TrendingUp className="h-3.5 w-3.5 text-purple-500" />}
+            {!hasMounted ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            ) : data.activity.length === 0 ? (
+              <div className="h-48 flex flex-col items-center justify-center text-muted-foreground">
+                <Activity className="h-8 w-8 mb-2 opacity-50" />
+                <p className="text-sm">No recent activity</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.activity.slice(0, 8).map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      {item.entity_type === "product" && <Package className="h-3.5 w-3.5 text-primary" />}
+                      {item.entity_type === "stock_movement" && <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />}
+                      {item.entity_type === "purchase_order" && <ShoppingCart className="h-3.5 w-3.5 text-blue-500" />}
+                      {item.entity_type === "alert" && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                      {item.entity_type === "category" && <TrendingUp className="h-3.5 w-3.5 text-purple-500" />}
+                      {!["product", "stock_movement", "purchase_order", "alert", "category"].includes(item.entity_type) && 
+                        <Activity className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium capitalize">{item.action.replace("_", " ")}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.details}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      {new Date(item.created_at).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{item.action}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {item.details}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {new Date(item.created_at).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

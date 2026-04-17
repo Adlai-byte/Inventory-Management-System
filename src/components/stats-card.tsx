@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { LucideIcon } from "lucide-react";
@@ -12,11 +14,30 @@ interface StatsCardProps {
     label: string;
   };
   className?: string;
+  iconColor?: string;
+  onClick?: () => void;
 }
 
-export function StatsCard({ title, value, description, icon: Icon, trend, className }: StatsCardProps) {
+export function StatsCard({ title, value, description, icon: Icon, trend, className, iconColor = "emerald", onClick }: StatsCardProps) {
+  const colorClasses: Record<string, { bg: string; text: string }> = {
+    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" },
+    blue: { bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400" },
+    amber: { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400" },
+    purple: { bg: "bg-purple-500/10", text: "text-purple-600 dark:text-purple-400" },
+    red: { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400" },
+  };
+
+  const colors = colorClasses[iconColor] || colorClasses.emerald;
+
   return (
-    <Card className={cn("relative overflow-hidden group hover:shadow-lg transition-all duration-300", className)}>
+    <Card 
+      className={cn(
+        "relative overflow-hidden group hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300", 
+        onClick && "cursor-pointer",
+        className
+      )}
+      onClick={onClick}
+    >
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
@@ -42,13 +63,12 @@ export function StatsCard({ title, value, description, icon: Icon, trend, classN
               <p className="text-xs text-muted-foreground">{description}</p>
             )}
           </div>
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/10 to-chart-3/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-            <Icon className="h-6 w-6 text-primary" />
+          <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300", colors.bg, colors.text)}>
+            <Icon className="h-6 w-6" />
           </div>
         </div>
       </CardContent>
-      {/* Decorative gradient stripe */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/50 via-chart-3/50 to-primary/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500/50 via-teal-500/50 to-emerald-500/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
     </Card>
   );
 }
