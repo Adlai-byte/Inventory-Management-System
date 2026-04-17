@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Package, Plus, Search, MoreHorizontal, Pencil, Trash2, Loader2, AlertTriangle, Download, FileDown } from "lucide-react";
+import { Package, Plus, Search, MoreHorizontal, Pencil, Trash2, Loader2, AlertTriangle, Download, FileDown, Upload } from "lucide-react";
 import type { Product, Category, Supplier } from "@/lib/types";
 import { Pagination } from "@/components/ui/pagination";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,6 +49,10 @@ export default function ProductsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; updated: number; skipped: number; errors: string[] } | null>(null);
 
   const [form, setForm] = useState({
     name: "", sku: "", description: "", category_id: "", supplier_id: "",
@@ -231,6 +235,42 @@ export default function ProductsPage() {
     }
   };
 
+  const handleImportCSV = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await fetch("/api/products/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportResult(data);
+      toast.success(`Imported ${data.imported} new, updated ${data.updated} products`);
+      fetchData();
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to import";
+      toast.error(msg);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadCSVTemplate = () => {
+    const template = "name,sku,barcode,description,category_name,supplier_name,cost_price,quantity,min_stock_level,unit,status\n" +
+      "Sample Product,SKU-001,123456789,Description here,Category Name,Supplier Name,100.00,50,10,pcs,active";
+    const blob = new Blob([template], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "product_import_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // =============================================
   // Bulk Delete — with confirmation dialog
   // =============================================
@@ -250,6 +290,10 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <PageHeader title="Products" description={`${pagination.total} products in inventory`} icon={Package}>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setImportOpen(true); setImportFile(null); setImportResult(null); }} className="gap-2">
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </Button>
           <Button variant="outline" onClick={exportAllFilteredToCSV} disabled={exportingAll} className="gap-2">
             {exportingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
             Export All
@@ -443,6 +487,71 @@ export default function ProductsPage() {
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setBulkDeleteDialogOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleBulkDelete}><Trash2 className="mr-2 h-4 w-4" />Delete All {selectedIds.size}</Button></DialogFooter>
       </DialogContent></Dialog>
+
+      {/* CSV Import Dialog */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="h-5 w-5" />Import Products from CSV</DialogTitle>
+            <DialogDescription>Upload a CSV file to bulk import or update products. Products are matched by SKU.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="border-2 border-dashed rounded-lg p-6 text-center">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportResult(null); }}
+                className="text-sm"
+              />
+              {importFile && (
+                <p className="text-sm text-muted-foreground mt-2">{importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)</p>
+              )}
+            </div>
+            <button
+              onClick={downloadCSVTemplate}
+              className="text-sm text-primary hover:underline"
+            >
+              Download CSV template
+            </button>
+            {importResult && (
+              <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+                <p className="font-medium">Import Results:</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-emerald-500">{importResult.imported}</p>
+                    <p className="text-xs text-muted-foreground">New</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-500">{importResult.updated}</p>
+                    <p className="text-xs text-muted-foreground">Updated</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-amber-500">{importResult.skipped}</p>
+                    <p className="text-xs text-muted-foreground">Skipped</p>
+                  </div>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-destructive cursor-pointer">{importResult.errors.length} errors</summary>
+                    <ul className="text-xs text-destructive mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                      {importResult.errors.slice(0, 20).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Close</Button>
+            <Button onClick={handleImportCSV} disabled={!importFile || importing}>
+              {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -8,10 +8,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bell, LogOut, Settings } from "lucide-react";
+import { Bell, LogOut, Settings, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Profile, Notification } from "@/lib/types";
 import { useRouter } from "next/navigation";
+import { formatDistanceToNow } from "date-fns";
 
 
 export function NotificationsDropdown({
@@ -111,9 +112,27 @@ export function NotificationsDropdown({
                 <span className="text-xs text-muted-foreground">
                   {notif.message}
                 </span>
+                {notif.created_at && (
+                  <span className="text-[10px] text-muted-foreground/70">
+                    {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
+                  </span>
+                )}
               </DropdownMenuItem>
             ))
         )}
+        <DropdownMenuSeparator />
+        <div className="px-3 py-2 flex justify-center">
+          <button
+            className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+            onClick={async () => {
+              await fetch("/api/notifications", { method: "DELETE" });
+              onNotificationsChange([]);
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+            Clear all
+          </button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

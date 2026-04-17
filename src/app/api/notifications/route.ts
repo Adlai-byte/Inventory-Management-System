@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, execute } from "@/lib/db";
 import { requireAuth } from "@/lib/route-auth";
 
 interface NotificationRow {
@@ -76,12 +76,12 @@ export async function POST(request: NextRequest) {
 
     if (action === "mark_read") {
       if (notification_id) {
-        await query(
+        await execute(
           "UPDATE inv_notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
           [notification_id, auth.id]
         );
       } else {
-        await query(
+        await execute(
           "UPDATE inv_notifications SET is_read = 1 WHERE user_id = ?",
           [auth.id]
         );
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "create") {
-      await query(
+      await execute(
         "INSERT INTO inv_notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)",
         [auth.id, title, message, type || "info"]
       );
@@ -100,6 +100,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: unknown) {
     console.error("Notifications POST error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    await execute("DELETE FROM inv_notifications WHERE user_id = ?", [auth.id]);
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    console.error("Notifications DELETE error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -142,6 +142,8 @@ export default function DashboardLayout({
 
     fetchProfile();
     fetchNotifications();
+    const notifInterval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(notifInterval);
   }, []);
 
   const handleSignOut = async () => {

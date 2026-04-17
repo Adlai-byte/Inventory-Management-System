@@ -17,6 +17,7 @@ import {
   Activity,
   AlertCircle,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 import {
   BarChart,
@@ -71,6 +72,8 @@ export default function DashboardPage() {
     movementTypes: [],
     activity: [],
   });
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const hasMounted = useHasMounted();
 
   useEffect(() => {
@@ -80,14 +83,35 @@ export default function DashboardPage() {
         if (res.ok) {
           const json = await res.json();
           setData(json);
+          setLastRefresh(new Date());
         }
       } catch (error) {
         console.error("Dashboard fetch error:", error);
+      } finally {
+        setRefreshing(false);
       }
     };
 
     fetchDashboard();
+    const interval = setInterval(fetchDashboard, 60000);
+    return () => clearInterval(interval);
   }, []);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/dashboard");
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        setLastRefresh(new Date());
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const movementData = data.movements.length > 0 ? data.movements : [];
   const categoryData = data.categories.length > 0 ? data.categories : [];
@@ -99,6 +123,23 @@ export default function DashboardPage() {
         description="Inventory management overview"
         icon={LayoutDashboard}
       />
+
+      {/* Auto-refresh indicator */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <button
+          onClick={handleManualRefresh}
+          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+          disabled={refreshing}
+        >
+          <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+        {lastRefresh && (
+          <span>
+            · Updated {lastRefresh.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
