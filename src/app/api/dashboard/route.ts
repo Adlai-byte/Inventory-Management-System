@@ -10,6 +10,8 @@ interface TotalRow {
   total: number;
 }
 
+export const revalidate = 60; // Cache dashboard data for 60 seconds
+
 export async function GET() {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;

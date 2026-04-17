@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { Settings, Loader2, User, Shield } from "lucide-react";
+import { Settings, Loader2, User, Shield, Lock } from "lucide-react";
 import type { Profile } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: "" });
+  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -53,6 +55,43 @@ export default function SettingsPage() {
       toast.error(errorMessage);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!pwForm.current_password || !pwForm.new_password) {
+      toast.error("Please fill in all password fields");
+      return;
+    }
+    if (pwForm.new_password.length < 6) {
+      toast.error("New password must be at least 6 characters");
+      return;
+    }
+    if (pwForm.new_password !== pwForm.confirm_password) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    if (!confirm("Change your password?")) return;
+
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_password: pwForm.current_password,
+          new_password: pwForm.new_password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success("Password changed successfully");
+      setPwForm({ current_password: "", new_password: "", confirm_password: "" });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to change password";
+      toast.error(errorMessage);
+    } finally {
+      setPwSaving(false);
     }
   };
 
@@ -113,6 +152,56 @@ export default function SettingsPage() {
               Save Changes
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Change Password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Lock className="h-4 w-4" /> Change Password
+          </CardTitle>
+          <CardDescription>Update your account password</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="currentPassword">Current Password</Label>
+            <Input
+              id="currentPassword"
+              type="password"
+              value={pwForm.current_password}
+              onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
+              placeholder="Enter current password"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">New Password</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              value={pwForm.new_password}
+              onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
+              placeholder="At least 6 characters"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm New Password</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={pwForm.confirm_password}
+              onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })}
+              placeholder="Re-enter new password"
+            />
+          </div>
+          <Button onClick={handleChangePassword} disabled={pwSaving} variant="outline">
+            {pwSaving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Lock className="mr-2 h-4 w-4" />
+            )}
+            Change Password
+          </Button>
         </CardContent>
       </Card>
 
