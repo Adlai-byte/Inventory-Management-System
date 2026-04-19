@@ -56,18 +56,8 @@ if %errorlevel% neq 0 (
 )
 echo   Dependencies installed.
 
-REM [5] Build
-echo [5/7] Building application...
-call npm run build
-if %errorlevel% neq 0 (
-    echo   ERROR: Build failed. Fix the errors above and run this script again.
-    pause
-    exit /b 1
-)
-echo   Build complete.
-
-REM [6] Setup .env.local
-echo [6/7] Checking environment config...
+REM [5] Setup .env.local  (must happen BEFORE build)
+echo [5/7] Checking environment config...
 if not exist ".env.local" (
     echo.
     echo   .env.local not found!
@@ -89,6 +79,16 @@ if not exist ".env.local" (
 ) else (
     echo   .env.local found.
 )
+
+REM [6] Build
+echo [6/7] Building application...
+call npm run build
+if %errorlevel% neq 0 (
+    echo   ERROR: Build failed. Fix the errors above and run this script again.
+    pause
+    exit /b 1
+)
+echo   Build complete.
 
 REM [7] HTTPS certificates via mkcert
 echo [7/7] Setting up HTTPS certificates with mkcert...
@@ -146,6 +146,11 @@ if %errorlevel% neq 0 (
 )
 echo   Certificates saved to certs/
 
+REM Copy mkcert root CA to public/ so the phone can download it
+for /f "tokens=*" %%i in ('mkcert -CAROOT') do set MKCERT_CAROOT=%%i
+copy "%MKCERT_CAROOT%\rootCA.pem" public\ca.pem >nul
+echo   Root CA copied to public\ca.pem
+
 echo.
 echo ============================================================
 echo   Starting PM2...
@@ -166,10 +171,12 @@ if not "%LAN_IP%"=="" (
 )
 echo.
 echo   On your phone (first time only):
-echo     1. Open http://%LAN_IP%:3010/ca.pem in the phone browser
-echo     2. Download and install the certificate
-echo        iPhone: Settings > General > VPN ^& Device Management > trust it
-echo        Android: tap the file, name it "BATISTIL CA", type = CA certificate
+echo     1. Open https://%LAN_IP%:3010/ca.pem in the phone browser
+echo        (tap Advanced / Show Details then Proceed/Visit anyway)
+echo     2. Install the downloaded certificate:
+echo        iPhone: Settings ^> General ^> VPN ^& Device Management ^> BATISTIL CA ^> Install
+echo                then Settings ^> General ^> About ^> Certificate Trust Settings ^> toggle ON
+echo        Android: tap the file, enter your PIN, name it "BATISTIL CA", type = CA certificate
 echo.
 echo   Useful PM2 commands:
 echo     pm2 status        - check running services

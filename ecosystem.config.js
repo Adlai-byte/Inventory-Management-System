@@ -4,6 +4,7 @@ module.exports = {
       name: "batistil-app",
       script: "npm",
       args: "run start:inner",
+      cwd: __dirname,
       shell: true,
       env: { NODE_ENV: "production" },
       max_restarts: 10,
@@ -13,6 +14,7 @@ module.exports = {
     {
       name: "batistil-proxy",
       script: "https-proxy.js",
+      cwd: __dirname,
       env: { NODE_ENV: "production" },
       max_restarts: 10,
       restart_delay: 3000,
