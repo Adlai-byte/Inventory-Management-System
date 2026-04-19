@@ -101,6 +101,7 @@ export default function ScannerPage() {
   const lastScannedTimeRef = useRef<number>(0);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [nameMatches, setNameMatches] = useState<Product[]>([]);
 
   const currentMovement = MOVEMENT_OPTIONS.find(m => m.value === movementType)!;
   const isInbound = INBOUND_TYPES.includes(movementType as MovementType);
@@ -228,14 +229,18 @@ export default function ScannerPage() {
 
   const handleScanResult = useCallback(async (barcode: string) => {
     setLoading(true);
+    setNameMatches([]);
     try {
-      // Try network first
       const res = await fetch(`/api/scanner/lookup?q=${encodeURIComponent(barcode)}`);
       if (res.ok) {
-        const { data } = await res.json();
-        addToCart(data);
+        const body = await res.json();
+        if (body.matches) {
+          // Multiple name matches — show picker
+          setNameMatches(body.matches);
+        } else {
+          addToCart(body.data);
+        }
       } else {
-        // Try offline lookup
         const offlineData = await lookupProductOffline(barcode);
         if (offlineData) {
           addToCart(offlineData);
@@ -245,7 +250,6 @@ export default function ScannerPage() {
         }
       }
     } catch (error) {
-      // Catch network errors and try offline lookup
       const offlineData = await lookupProductOffline(barcode);
       if (offlineData) {
         addToCart(offlineData);
@@ -258,7 +262,6 @@ export default function ScannerPage() {
       if (inputMode === "camera") {
         setQuery("");
       } else {
-        // Smart Focus: Re-focus after manual scan to prepare for the next item
         inputRef.current?.focus();
       }
     }
@@ -271,10 +274,27 @@ export default function ScannerPage() {
     setCameraError(null);
 
     try {
+      // Manually acquire stream so we control play() — ZXing's loadedmetadata
+      // approach is unreliable on Android Chrome.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+
+      const video = videoRef.current!;
+      video.srcObject = stream;
+      video.muted = true;
+
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = reject;
+        setTimeout(resolve, 3000); // fallback if event never fires
+      });
+
+      await video.play();
+
       const codeReader = new BrowserMultiFormatReader();
-      const controls = await codeReader.decodeFromConstraints(
-        { video: { facingMode: "environment" } },
-        videoRef.current!,
+      const controls = await codeReader.decodeFromVideoElement(
+        video,
         async (result) => {
           if (!result) return;
           const code = result.getText();
@@ -291,9 +311,7 @@ export default function ScannerPage() {
       zxingControlsRef.current = controls;
       setIsScanning(true);
 
-      // Check torch support
-      const stream = videoRef.current?.srcObject as MediaStream;
-      const track = stream?.getVideoTracks()[0];
+      const track = stream.getVideoTracks()[0];
       const capabilities = track?.getCapabilities?.() as Record<string, unknown> | undefined;
       setTorchSupported(!!capabilities?.torch);
 
@@ -319,6 +337,8 @@ export default function ScannerPage() {
       zxingControlsRef.current = null;
     }
     if (videoRef.current) {
+      const stream = videoRef.current.srcObject as MediaStream | null;
+      stream?.getTracks().forEach(t => t.stop());
       videoRef.current.srcObject = null;
     }
     setIsScanning(false);
@@ -612,26 +632,48 @@ export default function ScannerPage() {
           </div>
 
           {inputMode === "keyboard" ? (
-            <form onSubmit={handleScan} className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Scan className="h-5 w-5" />}
-              </div>
-              <Input
-                ref={inputRef}
-                className="pl-10 h-12"
-                placeholder="Type Barcode or SKU..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <Button 
-                type="submit" 
-                size="sm" 
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
-                disabled={loading}
-              >
-                Search
-              </Button>
-            </form>
+            <div className="space-y-2">
+              <form onSubmit={handleScan} className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Scan className="h-5 w-5" />}
+                </div>
+                <Input
+                  ref={inputRef}
+                  className="pl-10 h-12"
+                  placeholder="Barcode, SKU, or product name..."
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setNameMatches([]); }}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
+                  disabled={loading}
+                >
+                  Search
+                </Button>
+              </form>
+              {nameMatches.length > 0 && (
+                <div className="rounded-lg border bg-background shadow-md overflow-hidden">
+                  <p className="text-xs text-muted-foreground px-3 py-2 border-b">
+                    {nameMatches.length} products found — tap to add
+                  </p>
+                  <div className="max-h-56 overflow-y-auto divide-y">
+                    {nameMatches.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors"
+                        onClick={() => { addToCart(p); setNameMatches([]); setQuery(""); inputRef.current?.focus(); }}
+                      >
+                        <p className="text-sm font-medium leading-snug">{p.name}</p>
+                        <p className="text-xs text-muted-foreground">SKU: {p.sku ?? "—"} · Stock: {p.quantity}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
@@ -639,6 +681,7 @@ export default function ScannerPage() {
                   ref={videoRef}
                   className="w-full h-full object-cover"
                   playsInline
+                  autoPlay
                   muted
                 />
                 {cameraLoading && (

@@ -21,21 +21,31 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Search by barcode or SKU
-    const products = await query<Product>(
-      `SELECT p.*, c.name as category_name 
-       FROM inv_products p 
-       LEFT JOIN inv_categories c ON p.category_id = c.id 
-       WHERE p.barcode = ? OR p.sku = ? 
-       LIMIT 1`,
-      [q, q]
+    const base = `SELECT p.*, c.name as category_name
+                  FROM inv_products p
+                  LEFT JOIN inv_categories c ON p.category_id = c.id`;
+
+    // 1. Exact barcode / SKU match
+    const exact = await query<Product>(`${base} WHERE p.barcode = ? OR p.sku = ? LIMIT 1`, [q, q]);
+    if (exact.length > 0) {
+      return NextResponse.json({ data: exact[0] });
+    }
+
+    // 2. Partial name match fallback
+    const byName = await query<Product>(
+      `${base} WHERE p.name LIKE ? ORDER BY p.name LIMIT 10`,
+      [`%${q}%`]
     );
 
-    if (products.length === 0) {
+    if (byName.length === 0) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data: products[0] });
+    if (byName.length === 1) {
+      return NextResponse.json({ data: byName[0] });
+    }
+
+    return NextResponse.json({ matches: byName });
   } catch (error: unknown) {
     console.error("Scanner lookup error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

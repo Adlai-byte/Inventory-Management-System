@@ -29,7 +29,11 @@ export function BarcodeScanDialog({ open, onOpenChange, onScan, title = "Scan Ba
       controlsRef.current.stop();
       controlsRef.current = null;
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (videoRef.current) {
+      const stream = videoRef.current.srcObject as MediaStream | null;
+      stream?.getTracks().forEach(t => t.stop());
+      videoRef.current.srcObject = null;
+    }
     setIsScanning(false);
   }, []);
 
@@ -38,28 +42,40 @@ export function BarcodeScanDialog({ open, onOpenChange, onScan, title = "Scan Ba
     setLoading(true);
     setError(null);
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+
+      const video = videoRef.current!;
+      video.srcObject = stream;
+      video.muted = true;
+
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = reject;
+        setTimeout(resolve, 3000);
+      });
+
+      await video.play();
+
       const reader = new BrowserMultiFormatReader();
-      const controls = await reader.decodeFromConstraints(
-        { video: { facingMode: "environment" } },
-        videoRef.current!,
-        (result) => {
-          if (!result) return;
-          const code = result.getText();
-          const now = Date.now();
-          if (code !== lastCodeRef.current || now - lastTimeRef.current > 1000) {
-            lastCodeRef.current = code;
-            lastTimeRef.current = now;
-            navigator.vibrate?.(50);
-            setFlash(true);
-            setTimeout(() => {
-              stopCamera();
-              setFlash(false);
-              onScan(code);
-              onOpenChange(false);
-            }, 500);
-          }
+      const controls = await reader.decodeFromVideoElement(video, (result) => {
+        if (!result) return;
+        const code = result.getText();
+        const now = Date.now();
+        if (code !== lastCodeRef.current || now - lastTimeRef.current > 1000) {
+          lastCodeRef.current = code;
+          lastTimeRef.current = now;
+          navigator.vibrate?.(50);
+          setFlash(true);
+          setTimeout(() => {
+            stopCamera();
+            setFlash(false);
+            onScan(code);
+            onOpenChange(false);
+          }, 500);
         }
-      );
+      });
       controlsRef.current = controls;
       setIsScanning(true);
       setLoading(false);
@@ -93,7 +109,7 @@ export function BarcodeScanDialog({ open, onOpenChange, onScan, title = "Scan Ba
         </DialogHeader>
 
         <div className="relative rounded-lg overflow-hidden bg-black aspect-video">
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+          <video ref={videoRef} className="w-full h-full object-cover" playsInline autoPlay muted />
 
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white">
