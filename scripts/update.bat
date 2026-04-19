@@ -13,6 +13,15 @@ echo.
 
 cd /d "%~dp0.."
 
+REM [0] Sanity check: PM2 available
+where pm2 >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   ERROR: PM2 is not installed or not on PATH.
+    echo   Run scripts\server-init.bat first.
+    pause
+    exit /b 1
+)
+
 echo [1/4] Pulling latest code...
 git pull
 if %errorlevel% neq 0 (

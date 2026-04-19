@@ -1,36 +1,38 @@
 @echo off
 title BATISTIL Inventory System
+REM ==========================================
+REM BASTISTIL Inventory - Manual Start
+REM ==========================================
+REM For first-time setup run scripts\server-init.bat instead.
+REM This script is only for manually (re)starting PM2 services.
+REM ==========================================
+
 echo ============================================================
 echo   BATISTIL MINIMART - Inventory Management System
 echo ============================================================
 echo.
-echo  Starting services...
+
+cd /d "%~dp0"
+
+where pm2 >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   ERROR: PM2 is not installed or not on PATH.
+    echo   Run scripts\server-init.bat once to complete setup.
+    pause
+    exit /b 1
+)
+
+call pm2 resurrect
+if %errorlevel% neq 0 (
+    echo   No saved PM2 process list. Starting from ecosystem.config.js...
+    call pm2 start ecosystem.config.js
+    call pm2 save
+)
+
 echo.
-
-:: Kill any existing instances
-taskkill /F /IM node.exe >nul 2>&1
-timeout /t 1 /nobreak >nul
-
-:: Start Next.js dev server in background
-start "Next.js Server" /min cmd /c "cd /d "%~dp0" && npm run dev:lan > next-dev.log 2>&1"
-
-:: Wait for Next.js to be ready
-echo  Waiting for app server...
-timeout /t 5 /nobreak >nul
-
-:: Start Cloudflare tunnel in background
-start "Cloudflare Tunnel" /min cmd /c "npx cloudflared tunnel run batistil-inventory > "%~dp0tunnel.log" 2>&1"
-
+call pm2 status
 echo.
-echo ============================================================
-echo   APP IS RUNNING
-echo ============================================================
-echo.
-echo   Local:    http://localhost:3000
-echo   Internet: https://batistilminimart.uk
-echo.
-echo   Camera works on mobile via the internet URL.
-echo   Keep this window open to keep the app running.
-echo ============================================================
+echo   Access: https://localhost:3010
+echo   Logs:   pm2 logs
 echo.
 pause

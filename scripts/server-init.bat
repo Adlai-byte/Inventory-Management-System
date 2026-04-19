@@ -15,19 +15,26 @@ echo.
 
 cd /d "%~dp0.."
 
-REM [1] Check Node.js
-echo [1/7] Checking Node.js...
+REM [1] Check Node.js (v20+)
+echo [1/10] Checking Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo   ERROR: Node.js not found.
-    echo   Install from: https://nodejs.org/
+    echo   Install Node.js 20 LTS or newer from: https://nodejs.org/
     pause
     exit /b 1
 )
+for /f "tokens=1 delims=." %%a in ('node -p "process.versions.node"') do set NODE_MAJOR=%%a
 for /f "tokens=*" %%i in ('node --version') do echo   Node.js %%i
+if !NODE_MAJOR! LSS 20 (
+    echo   ERROR: Node.js 20 or newer is required ^(Next.js 16^).
+    echo   Upgrade from: https://nodejs.org/
+    pause
+    exit /b 1
+)
 
 REM [2] Check git
-echo [2/7] Checking git...
+echo [2/10] Checking git...
 git --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo   ERROR: git not found.
@@ -37,8 +44,22 @@ if %errorlevel% neq 0 (
 )
 echo   git OK.
 
-REM [3] Install PM2
-echo [3/7] Installing PM2 globally...
+REM [3] Check MySQL service
+echo [3/10] Checking MySQL service...
+for /f "tokens=*" %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-mysql.ps1"') do set MYSQL_STATUS=%%i
+if not "!MYSQL_STATUS!"=="OK" (
+    echo   WARNING: No running MySQL service detected.
+    echo   Install MySQL 8+ and start the service before continuing:
+    echo     https://dev.mysql.com/downloads/installer/
+    echo.
+    set /p MYSQLSKIP="Continue anyway? (y/N): "
+    if /i not "!MYSQLSKIP!"=="y" exit /b 1
+) else (
+    echo   MySQL service is running.
+)
+
+REM [4] Install PM2
+echo [4/10] Installing PM2 globally...
 call npm install -g pm2
 if %errorlevel% neq 0 (
     echo   ERROR: Failed to install PM2.
@@ -47,8 +68,8 @@ if %errorlevel% neq 0 (
 )
 echo   PM2 ready.
 
-REM [4] Install dependencies
-echo [4/7] Installing dependencies...
+REM [5] Install dependencies
+echo [5/10] Installing dependencies...
 call npm install
 if %errorlevel% neq 0 (
     echo   ERROR: npm install failed.
@@ -57,32 +78,37 @@ if %errorlevel% neq 0 (
 )
 echo   Dependencies installed.
 
-REM [5] Setup .env.local  (must happen BEFORE build)
-echo [5/7] Checking environment config...
+REM [6] Setup .env.local (JWT auto-gen + production defaults, BEFORE build)
+echo [6/10] Checking environment config...
 if not exist ".env.local" (
-    echo.
-    echo   .env.local not found!
     if exist ".env.example" (
         copy .env.example .env.local >nul
         echo   Copied .env.example to .env.local
+    ) else (
+        echo   ERROR: .env.example not found.
+        pause
+        exit /b 1
     )
+
+    REM Auto-generate JWT_SECRET
+    for /f "tokens=*" %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0gen-jwt-secret.ps1"') do set JWT_NEW=%%i
+    if not "!JWT_NEW!"=="" (
+        powershell -NoProfile -Command "(Get-Content .env.local) -replace '^JWT_SECRET=.*', 'JWT_SECRET=!JWT_NEW!' | Set-Content .env.local"
+        echo   JWT_SECRET auto-generated.
+    )
+
     echo.
-    echo   Edit .env.local now with your MySQL credentials and JWT_SECRET:
-    echo     MYSQL_HOST=localhost
-    echo     MYSQL_USER=root
-    echo     MYSQL_PASSWORD=your_password
-    echo     MYSQL_DATABASE=bmm_db
-    echo     JWT_SECRET=a-long-random-secret-at-least-32-chars
+    echo   Opening .env.local for MySQL credentials...
+    echo   Set at minimum: MYSQL_PASSWORD (and MYSQL_USER if not root).
     echo.
     notepad .env.local
-    echo.
     set /p ENVOK="Press Enter once you have saved .env.local..."
 ) else (
-    echo   .env.local found.
+    echo   .env.local already exists. Leaving it untouched.
 )
 
-REM [6] Build
-echo [6/7] Building application...
+REM [7] Build
+echo [7/10] Building application...
 call npm run build
 if %errorlevel% neq 0 (
     echo   ERROR: Build failed. Fix the errors above and run this script again.
@@ -91,31 +117,18 @@ if %errorlevel% neq 0 (
 )
 echo   Build complete.
 
-REM [7] HTTPS certificates via mkcert
-echo [7/7] Setting up HTTPS certificates with mkcert...
+REM [8] HTTPS certificates via mkcert
+echo [8/10] Setting up HTTPS certificates with mkcert...
 mkcert -version >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo   mkcert not found. Install it first:
+    echo     Option A (winget): winget install FiloSottile.mkcert
+    echo     Option B (manual): https://github.com/FiloSottile/mkcert/releases
     echo.
-    echo     Option A (winget):
-    echo       winget install FiloSottile.mkcert
-    echo.
-    echo     Option B (manual):
-    echo       https://github.com/FiloSottile/mkcert/releases
-    echo       Download mkcert-v*-windows-amd64.exe, rename to mkcert.exe,
-    echo       place in C:\Windows\System32 or add to PATH.
-    echo.
-    echo   After installing mkcert, run these commands once:
-    echo     mkcert -install
-    echo     mkcert -key-file certs/key.pem -cert-file certs/cert.pem localhost 127.0.0.1 YOUR-LAN-IP
-    echo.
-    echo   Then start the server:
-    echo     pm2 start ecosystem.config.js
-    echo     pm2 save
-    echo.
+    echo   After installing mkcert, re-run this script.
     pause
-    exit /b 0
+    exit /b 1
 )
 
 echo   Installing local CA (a trust dialog may appear)...
@@ -123,8 +136,6 @@ call mkcert -install
 
 if not exist "certs" mkdir certs
 
-REM Detect the LAN IP of the adapter with a default gateway
-REM (skips virtual adapters from WSL, Hyper-V, VirtualBox, Docker)
 for /f "tokens=*" %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0detect-lan-ip.ps1"') do set LAN_IP=%%i
 
 if "!LAN_IP!"=="" (
@@ -152,17 +163,36 @@ if %errorlevel% neq 0 (
 )
 echo   Certificates saved to certs/
 
-REM Copy mkcert root CA to public/ so the phone can download it
 for /f "tokens=*" %%i in ('mkcert -CAROOT') do set MKCERT_CAROOT=%%i
-copy "%MKCERT_CAROOT%\rootCA.pem" public\ca.pem >nul
+copy "!MKCERT_CAROOT!\rootCA.pem" public\ca.pem >nul
 echo   Root CA copied to public\ca.pem
 
-echo.
-echo ============================================================
-echo   Starting PM2...
-echo ============================================================
+REM [9] Open Windows Firewall port 3010
+echo [9/10] Opening Windows Firewall (port 3010)...
+call "%~dp0..\open-firewall.bat" /noprompt
+if %errorlevel% neq 0 (
+    echo   Firewall rule failed. Re-run this script as Administrator,
+    echo   or run open-firewall.bat manually as Administrator.
+)
+
+REM [10] Start PM2 + register auto-start on user logon
+echo [10/10] Starting PM2 and registering auto-start...
 call pm2 start ecosystem.config.js
 call pm2 save
+
+schtasks /query /tn "BASTISTIL Inventory Startup" >nul 2>&1
+if %errorlevel% equ 0 (
+    schtasks /delete /tn "BASTISTIL Inventory Startup" /f >nul 2>&1
+)
+schtasks /create /tn "BASTISTIL Inventory Startup" /tr "\"%~dp0pm2-startup.bat\"" /sc ONLOGON /RL HIGHEST /f >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   Auto-start registered (runs on Windows logon).
+    echo   Note: enable auto-login on this PC for unattended reboot recovery.
+) else (
+    echo   Could not register auto-start task. Run this script as Administrator,
+    echo   or register manually:
+    echo     schtasks /create /tn "BASTISTIL Inventory Startup" /tr "%~dp0pm2-startup.bat" /sc ONLOGON /RL HIGHEST /f
+)
 
 echo.
 echo ============================================================
@@ -180,7 +210,7 @@ echo   On your phone (first time only):
 echo     1. Open https://!LAN_IP!:3010/ca.pem in the phone browser
 echo        (tap Advanced / Show Details then Proceed/Visit anyway)
 echo     2. Install the downloaded certificate:
-echo        iPhone: Settings ^> General ^> VPN ^& Device Management ^> BATISTIL CA ^> Install
+echo        iPhone: Settings ^> General ^> VPN ^& Device Management ^> mkcert CA ^> Install
 echo                then Settings ^> General ^> About ^> Certificate Trust Settings ^> toggle ON
 echo        Android: tap the file, enter your PIN, name it "BATISTIL CA", type = CA certificate
 echo.
