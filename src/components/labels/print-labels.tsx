@@ -15,7 +15,7 @@ interface PrintLabelsProps {
 }
 
 function formatCurrency(amount: number): string {
-  return "₱" + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "PHP " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function BarcodeSVG({ value, width = 1.5, height = 35 }: { value: string; width?: number; height?: number }) {

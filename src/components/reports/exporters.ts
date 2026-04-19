@@ -1,4 +1,3 @@
-import { formatCurrency } from "@/lib/utils";
 import type {
   CategoryData,
   LowStockProduct,
@@ -8,6 +7,10 @@ import type {
   TopProduct,
   TopDispatchedProduct,
 } from "@/components/reports/types";
+
+function formatCurrency(amount: number): string {
+  return "PHP " + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
   const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
