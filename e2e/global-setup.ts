@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 
 export default async function globalSetup(config: FullConfig) {
-  const baseURL = config.projects[0].use.baseURL ?? "http://127.0.0.1:3000";
+  const baseURL = config.projects[0].use.baseURL ?? "http://127.0.0.1:3010";
   const authDir = path.join(__dirname, ".auth");
 
   if (!fs.existsSync(authDir)) {

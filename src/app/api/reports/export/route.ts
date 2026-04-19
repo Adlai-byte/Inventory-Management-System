@@ -28,7 +28,7 @@ function formatCurrency(amount: number): string {
 function addReportHeader(doc: jsPDF, title: string): void {
   doc.setFontSize(18);
   doc.setTextColor(30, 30, 30);
-  doc.text("BASTISTIL Minimart", 14, 20);
+  doc.text("BATISTIL Minimart", 14, 20);
   doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
   doc.text(title, 14, 28);

@@ -4,6 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Tell the browser this site manages its own color scheme.
+   Prevents Android/Samsung forced-dark-mode and Dark Reader from
+   injecting data-darkreader-inline-* attributes into SVGs, which
+   would cause React hydration mismatches. */
+:root {
+  color-scheme: dark light;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -126,6 +134,16 @@
   html {
     @apply font-sans;
   }
+}
+
+@keyframes scanline {
+  0%, 100% { top: 0; opacity: 1; }
+  47% { opacity: 1; }
+  50% { top: calc(100% - 2px); opacity: 0.5; }
+  53% { opacity: 1; }
+}
+.animate-scanline {
+  animation: scanline 1.8s ease-in-out infinite;
 }
 
 @layer utilities {

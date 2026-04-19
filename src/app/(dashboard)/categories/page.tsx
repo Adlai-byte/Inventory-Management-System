@@ -32,6 +32,11 @@ export default function CategoriesPage() {
   const [deleting, setDeleting] = useState<Category | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", description: "" });
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const exportToCSV = () => {
     const headers = ["Name", "Description", "Created"];
@@ -103,9 +108,16 @@ export default function CategoriesPage() {
     toast.success("Category deleted"); setDeleteDialogOpen(false); setDeleting(null); fetchData();
   };
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Categories" description={`${pagination.total} total categories`} icon={Tags}>
+      <PageHeader 
+        title="Categories" 
+        description={`${pagination.total} total categories`} 
+        helpText="Organize your products into logical groups like 'Dairy', 'Canned Goods', or 'Household'. Categorization helps with reporting, filtering, and organizing your warehouse layout. You can add, edit, or remove categories as your inventory expands."
+        icon={Tags}
+      >
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportToCSV} className="gap-2"><Download className="h-4 w-4" />Export</Button>
           <Button onClick={() => { setEditing(null); setForm({ name: "", description: "" }); setDialogOpen(true); }} className="gap-2 h-11 text-base px-6"><Plus className="h-5 w-5" /> Add Category</Button>

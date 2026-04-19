@@ -42,11 +42,13 @@ export async function GET(request: NextRequest) {
     );
     const total = countResult[0]?.total || 0;
 
-    // IMPORTANT: limit and offset must be numbers
+    // Get paginated data
     const activities = await simpleQuery(
-      `SELECT * FROM inv_activity_log 
+      `SELECT al.*, u.full_name as user_name
+       FROM inv_activity_log al
+       LEFT JOIN inv_users u ON al.user_id = u.id
        ${whereClause}
-       ORDER BY created_at DESC 
+       ORDER BY al.created_at DESC 
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );

@@ -120,6 +120,14 @@ export async function getProductById(request: APIRequestContext, id: number): Pr
   return json.data;
 }
 
+export async function getProductBySku(request: APIRequestContext, sku: string): Promise<ProductRow> {
+  const res = await request.get(`/api/products?q=${encodeURIComponent(sku)}&limit=1`);
+  expect(res.ok(), `getProductBySku(${sku}) failed: ${res.status()}`).toBeTruthy();
+  const json = (await res.json()) as { data: ProductRow[] };
+  expect(json.data.length, `No product found with SKU ${sku}`).toBeGreaterThan(0);
+  return json.data[0];
+}
+
 /** Set a product's quantity via an adjustment movement. Returns the previous quantity. */
 export async function setProductQuantity(
   request: APIRequestContext,

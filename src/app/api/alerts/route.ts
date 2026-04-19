@@ -36,28 +36,34 @@ export async function GET() {
 
     const expiredProducts = await simpleQuery(
       `SELECT 
-        p.id, p.name, p.sku, p.quantity, p.expiry_date,
+        b.id as batch_id, b.batch_number, b.quantity, b.expiry_date,
+        p.id, p.name, p.sku,
         c.name as category_name,
         s.name as supplier_name
-       FROM inv_products p
+       FROM inv_batches b
+       JOIN inv_products p ON b.product_id = p.id
        LEFT JOIN inv_categories c ON p.category_id = c.id
        LEFT JOIN inv_suppliers s ON p.supplier_id = s.id
-       WHERE p.expiry_date IS NOT NULL AND p.expiry_date < CURDATE() AND p.status = 'active'
-       ORDER BY p.expiry_date ASC
+       WHERE b.expiry_date IS NOT NULL AND b.expiry_date < CURDATE() 
+         AND b.quantity > 0 AND p.status = 'active'
+       ORDER BY b.expiry_date ASC
        LIMIT 10`
     );
 
     const expiringProducts = await simpleQuery(
       `SELECT 
-        p.id, p.name, p.sku, p.quantity, p.expiry_date,
+        b.id as batch_id, b.batch_number, b.quantity, b.expiry_date,
+        p.id, p.name, p.sku,
         c.name as category_name,
         s.name as supplier_name
-       FROM inv_products p
+       FROM inv_batches b
+       JOIN inv_products p ON b.product_id = p.id
        LEFT JOIN inv_categories c ON p.category_id = c.id
        LEFT JOIN inv_suppliers s ON p.supplier_id = s.id
-       WHERE p.expiry_date IS NOT NULL AND p.expiry_date >= CURDATE() 
-         AND p.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND p.status = 'active'
-       ORDER BY p.expiry_date ASC
+       WHERE b.expiry_date IS NOT NULL AND b.expiry_date >= CURDATE() 
+         AND b.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) 
+         AND b.quantity > 0 AND p.status = 'active'
+       ORDER BY b.expiry_date ASC
        LIMIT 20`
     );
 

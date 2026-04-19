@@ -116,11 +116,14 @@ export default function DashboardPage() {
   const movementData = data.movements.length > 0 ? data.movements : [];
   const categoryData = data.categories.length > 0 ? data.categories : [];
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
         description="Inventory management overview"
+        helpText="Welcome to the BATISTIL Minimart dashboard! This page provides a real-time overview of your inventory health. You can track critical KPIs like low stock alerts, pending supplier deliveries, and upcoming product expiries. Charts below visualize your stock movement trends and category distribution. Data refreshes automatically every minute."
         icon={LayoutDashboard}
       />
 
@@ -136,7 +139,7 @@ export default function DashboardPage() {
         </button>
         {lastRefresh && (
           <span>
-            · Updated {lastRefresh.toLocaleTimeString()}
+            · Updated {hasMounted ? lastRefresh.toLocaleTimeString() : "..."}
           </span>
         )}
       </div>

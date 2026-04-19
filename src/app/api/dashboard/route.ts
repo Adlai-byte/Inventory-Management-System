@@ -82,16 +82,18 @@ export async function GET() {
        LIMIT 10`
     );
 
-    // Expiry alerts count
+    // Expiry alerts count (from batches)
     const expiringCount = await queryOne<CountRow>(
-      `SELECT COUNT(*) as count FROM inv_products 
-       WHERE expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) 
-       AND status = 'active'`
+      `SELECT COUNT(*) as count FROM inv_batches b 
+       JOIN inv_products p ON b.product_id = p.id
+       WHERE b.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) 
+       AND b.quantity > 0 AND p.status = 'active'`
     );
 
     const expiredCount = await queryOne<CountRow>(
-      `SELECT COUNT(*) as count FROM inv_products 
-       WHERE expiry_date < CURDATE() AND status = 'active'`
+      `SELECT COUNT(*) as count FROM inv_batches b 
+       JOIN inv_products p ON b.product_id = p.id
+       WHERE b.expiry_date < CURDATE() AND b.quantity > 0 AND p.status = 'active'`
     );
 
     return NextResponse.json({

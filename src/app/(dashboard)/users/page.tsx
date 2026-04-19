@@ -17,7 +17,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Profile } from "@/lib/types";
+import { PageHeader } from "@/components/page-header";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
@@ -63,6 +64,11 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"admin" | "manager" | "staff">("staff");
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -175,8 +181,6 @@ export default function UsersPage() {
     }
   };
 
-  const [hasMounted, setHasMounted] = useState(false);
-
   useEffect(() => {
     setHasMounted(true);
   }, []);
@@ -200,15 +204,14 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
-          <p className="text-muted-foreground">
-            {pagination.total} staff accounts in the system.
-          </p>
-        </div>
+      <PageHeader 
+        title="User Management" 
+        description={`${pagination.total} staff accounts in the system`} 
+        helpText="Manage staff access and permissions. You can create new user accounts, assign roles (Admin, Manager, Staff), and update contact details. Only Administrators should manage user permissions to ensure system security and data integrity."
+        icon={User}
+      >
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger className="inline-flex items-center justify-center rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-6 gap-2 text-base">
+          <DialogTrigger className={buttonVariants({ variant: "default", size: "lg" })}>
             <UserPlus className="h-5 w-5" />
             Add User
           </DialogTrigger>
@@ -280,7 +283,7 @@ export default function UsersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       <Card><CardContent className="p-4">
         <div className="relative w-full sm:w-80">

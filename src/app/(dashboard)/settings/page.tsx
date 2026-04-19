@@ -110,7 +110,12 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <PageHeader title="Settings" description="Manage your account and preferences" icon={Settings} />
+      <PageHeader 
+        title="Settings" 
+        description="Manage your account and preferences" 
+        helpText="Configure your account preferences here. You can update your profile name, change your login password, and verify your system role and permissions. Keeping your profile information accurate ensures correct attribution in the system's activity logs."
+        icon={Settings} 
+      />
 
       {/* Profile Card */}
       <Card>
@@ -240,7 +245,7 @@ export default function SettingsPage() {
               <span className="text-white font-bold">B</span>
             </div>
             <div>
-              <p className="font-semibold">BASTISTIL Minimart</p>
+              <p className="font-semibold">BATISTIL Minimart</p>
               <p className="text-xs text-muted-foreground">Inventory Management System v1.0</p>
             </div>
           </div>

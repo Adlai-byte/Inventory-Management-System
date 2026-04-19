@@ -187,7 +187,12 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Supplier Deliveries" description={`${pagination.total} recorded deliveries`} icon={Truck}>
+      <PageHeader 
+        title="Supplier Deliveries" 
+        description={`${pagination.total} recorded deliveries`} 
+        helpText="Manage the procurement of stock from your suppliers. Create a 'Purchase Order' to track what was ordered, then use the 'Receive' action when items arrive at your warehouse to automatically update inventory levels. This module helps track pending shipments and maintain accurate cost basis for your products."
+        icon={Truck}
+      >
         <Button id="btn-record-delivery" onClick={() => { setForm({ supplier_id: "", notes: "", items: [{ product_id: "", quantity: "1", unit_cost: "0" }] }); setDialogOpen(true); }} className="gap-2 h-11 text-base px-6">
           <Plus className="h-5 w-5" /> New Purchase Order
         </Button>

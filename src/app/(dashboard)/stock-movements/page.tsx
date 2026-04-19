@@ -16,11 +16,11 @@ import { Pagination } from "@/components/ui/pagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { ArrowLeftRight, Plus, Search, Loader2, ArrowUpRight, ArrowDownRight, RefreshCw, Check } from "lucide-react";
+import { ArrowLeftRight, Plus, Search, Loader2, ArrowUpRight, ArrowDownRight, RefreshCw, Check, Tag } from "lucide-react";
 
 interface ProductOption { id: number; name: string; sku: string; quantity?: number; }
 interface ProductApiRow { id: number; name: string; sku: string; }
-interface MovementRow { id: number; product_id: number; type: string; quantity: number; reference: string | null; notes: string | null; created_by: number | null; created_at: string; product_name?: string; product_sku?: string; }
+interface MovementRow { id: number; product_id: number; type: string; quantity: number; reference: string | null; notes: string | null; created_by: number | null; created_at: string; product_name?: string; product_sku?: string; created_by_name?: string; batch_number?: string | null; }
 
 export default function StockMovementsPage() {
   const [movements, setMovements] = useState<MovementRow[]>([]);
@@ -39,7 +39,16 @@ export default function StockMovementsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ product_id: "", type: "restock", quantity: "", reference: "", notes: "" });
+  const [form, setForm] = useState({ 
+    product_id: "", 
+    type: "restock", 
+    quantity: "", 
+    reference: "", 
+    notes: "",
+    batch_number: "",
+    manufacture_date: "",
+    expiry_date: ""
+  });
   
   // Confirm dialog state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -129,14 +138,32 @@ export default function StockMovementsPage() {
       fetch("/api/stock-movements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: parseInt(form.product_id), type: form.type, quantity: qty, reference: form.reference || null, notes: form.notes || null }),
+        body: JSON.stringify({ 
+          product_id: parseInt(form.product_id), 
+          type: form.type, 
+          quantity: qty, 
+          reference: form.reference || null, 
+          notes: form.notes || null,
+          batch_number: form.batch_number || null,
+          manufacture_date: form.manufacture_date || null,
+          expiry_date: form.expiry_date || null,
+        }),
       }).then(response => {
         if (!response.ok) return response.json().then(err => { throw new Error(err.error || "Failed"); });
         return response.json();
       }).then(() => {
         toast.success(`Stock ${form.type} recorded`);
         setDialogOpen(false);
-        setForm({ product_id: "", type: "restock", quantity: "", reference: "", notes: "" });
+        setForm({ 
+          product_id: "", 
+          type: "restock", 
+          quantity: "", 
+          reference: "", 
+          notes: "",
+          batch_number: "",
+          manufacture_date: "",
+          expiry_date: ""
+        });
         fetchData();
       }).catch((error: unknown) => {
         const errorMessage = error instanceof Error ? error.message : "Failed to record stock movement";
@@ -155,10 +182,17 @@ export default function StockMovementsPage() {
     return <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 gap-1"><ArrowUpRight className="h-3 w-3" />Outbound</Badge>;
   };
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Stock Movements" description={`${pagination.total} total movements`} icon={ArrowLeftRight}>
-        <Button onClick={() => { setForm({ product_id: "", type: "restock", quantity: "", reference: "", notes: "" }); setDialogOpen(true); }} className="gap-2 h-11 text-base px-6"><Plus className="h-5 w-5" /> Record Movement</Button>
+      <PageHeader 
+        title="Stock Movements" 
+        description={`${pagination.total} total movements`} 
+        helpText="Record and track every change in your inventory levels. 'Inbound' movements add stock (e.g., restocking), 'Dispatch' records items sent out for sale or transfer, and 'Adjustments' are for manual corrections (e.g., after a physical count). Each entry tracks who performed the action to maintain a clear audit trail."
+        icon={ArrowLeftRight}
+      >
+        <Button onClick={() => { setForm({ product_id: "", type: "restock", quantity: "", reference: "", notes: "", batch_number: "", manufacture_date: "", expiry_date: "" }); setDialogOpen(true); }} className="gap-2 h-11 text-base px-6"><Plus className="h-5 w-5" /> Record Movement</Button>
       </PageHeader>
 
       <Card><CardContent className="p-4">
@@ -179,10 +213,12 @@ export default function StockMovementsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
+                  <TableHead>Batch #</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Quantity</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Notes</TableHead>
+                  <TableHead>Performed By</TableHead>
                   <TableHead>Date</TableHead>
                 </TableRow>
               </TableHeader>
@@ -194,10 +230,12 @@ export default function StockMovementsPage() {
                 ) : movements.map((m) => (
                   <TableRow key={m.id}>
                     <TableCell><div><p className="font-medium text-sm">{m.product_name || "Unknown"}</p><p className="text-xs text-muted-foreground font-mono">{m.product_sku ?? ""}</p></div></TableCell>
+                    <TableCell><Badge variant="outline" className="font-mono text-[10px]">{m.batch_number || "—"}</Badge></TableCell>
                     <TableCell>{getTypeBadge(m.type)}</TableCell>
                     <TableCell className="text-right font-semibold">{["restock", "transfer_in", "initial", "adjustment"].includes(m.type) ? `+${m.quantity}` : `-${m.quantity}`}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{m.reference || "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{m.notes || "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{m.created_by_name || "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{hasMounted ? formatRelativeTime(m.created_at) : "..."}</TableCell>
                   </TableRow>
                 ))}
@@ -285,6 +323,42 @@ export default function StockMovementsPage() {
             <div className="space-y-2"><Label>Quantity *</Label><Input type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="0" className="h-11" /></div>
             <div className="space-y-2"><Label>Reference</Label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="PO-001" className="h-11" /></div>
           </div>
+
+          {form.type === "restock" && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-primary/5 border border-primary/10">
+              <div className="col-span-full font-semibold text-sm flex items-center gap-2 text-primary">
+                <Tag className="h-4 w-4" /> Batch & Expiry Details
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider">Batch #</Label>
+                <Input
+                  placeholder="LOT-2024-001"
+                  value={form.batch_number}
+                  onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
+                  className="h-10 bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider">Expiry Date</Label>
+                <Input
+                  type="date"
+                  value={form.expiry_date}
+                  onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
+                  className="h-10 bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider">Mfg Date</Label>
+                <Input
+                  type="date"
+                  value={form.manufacture_date}
+                  onChange={(e) => setForm({ ...form, manufacture_date: e.target.value })}
+                  className="h-10 bg-background"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2"><Label>Notes</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional notes (optional)" className="resize-none" rows={3} /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)} className="h-11 px-6">Cancel</Button><Button onClick={handleSave} disabled={saving} className="h-11 px-6">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Record Movement</Button></DialogFooter>

@@ -96,10 +96,7 @@ echo Next steps:
 echo   1. Ensure MySQL is running
 echo   2. Run: mysql -u root -p ^< sql/inventory_schema.sql
 echo   3. Run: node scripts/seed-database.js (optional)
-echo   4. Start the server: npm run start:lan
-echo.
-echo Or use Docker:
-echo   docker-compose up -d
+echo   4. Start the server: npm run dev:lan
 echo.
 
 set /p SEED="Would you like to seed the database now? (y/n): "
@@ -116,6 +113,6 @@ if /i "%SEED%"=="y" (
 
 echo.
 echo Setup finished. You can now start the server with:
-echo   npm run start:lan
+echo   npm run dev:lan
 echo.
 pause

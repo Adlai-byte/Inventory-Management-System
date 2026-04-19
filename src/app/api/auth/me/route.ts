@@ -29,28 +29,46 @@ export async function PUT(request: NextRequest) {
       await execute("UPDATE inv_users SET full_name = ? WHERE id = ?", [trimmed, user.id]);
     }
 
-    // Change password (requires current password verification)
-    if (current_password && new_password) {
-      // Fetch current password hash
-      const row = await queryOne<{ password_hash: string }>(
-        "SELECT password_hash FROM inv_users WHERE id = ?",
-        [user.id]
-      );
-      if (!row) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // Change password
+    if (new_password) {
+      const { force_change } = body as { force_change?: boolean };
+
+      if (new_password.length < 8) {
+        return NextResponse.json({ error: "New password must be at least 8 characters" }, { status: 400 });
       }
 
-      const valid = await verifyPassword(current_password, row.password_hash);
-      if (!valid) {
-        return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
-      }
-
-      if (new_password.length < 6) {
-        return NextResponse.json({ error: "New password must be at least 6 characters" }, { status: 400 });
+      // Force-change path: user must have must_change_password set; skip old password check
+      if (force_change) {
+        const dbUser = await queryOne<{ must_change_password: number }>(
+          "SELECT must_change_password FROM inv_users WHERE id = ?",
+          [user.id]
+        );
+        if (!dbUser?.must_change_password) {
+          return NextResponse.json({ error: "Force change not required" }, { status: 400 });
+        }
+      } else {
+        // Normal path: verify current password
+        if (!current_password) {
+          return NextResponse.json({ error: "Current password is required" }, { status: 400 });
+        }
+        const row = await queryOne<{ password_hash: string }>(
+          "SELECT password_hash FROM inv_users WHERE id = ?",
+          [user.id]
+        );
+        if (!row) {
+          return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+        const valid = await verifyPassword(current_password, row.password_hash);
+        if (!valid) {
+          return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
+        }
       }
 
       const hashed = await hashPassword(new_password);
-      await execute("UPDATE inv_users SET password_hash = ? WHERE id = ?", [hashed, user.id]);
+      await execute(
+        "UPDATE inv_users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+        [hashed, user.id]
+      );
     }
 
     return NextResponse.json({

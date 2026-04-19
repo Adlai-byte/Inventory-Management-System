@@ -1,10 +1,10 @@
 -- =======================================
 -- BATISTIL MINIMART INVENTORY SYSTEM
--- MySQL Schema (separate from POS tables)
+-- MySQL Schema v2 (canonical, Docker init)
 -- =======================================
 
 -- =======================================
--- USERS (replaces Supabase Auth)
+-- USERS
 -- =======================================
 CREATE TABLE IF NOT EXISTS `inv_users` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -14,13 +14,14 @@ CREATE TABLE IF NOT EXISTS `inv_users` (
   `email` VARCHAR(255) DEFAULT NULL,
   `avatar_url` TEXT DEFAULT NULL,
   `role` ENUM('admin', 'manager', 'staff') DEFAULT 'staff',
+  `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Default admin account (password: admin123, username: admin)
-INSERT INTO `inv_users` (`username`, `password_hash`, `full_name`, `role`)
-VALUES ('admin', '$2b$10$ngDMbg6ggOhHo7OMJhmG0eDRFJYTLJVmCTSNulp1SWKiwBfn56WG6', 'Admin', 'admin')
+-- Default admin (password: admin123) — MUST be changed on first login
+INSERT INTO `inv_users` (`username`, `password_hash`, `full_name`, `role`, `must_change_password`)
+VALUES ('admin', '$2b$10$ngDMbg6ggOhHo7OMJhmG0eDRFJYTLJVmCTSNulp1SWKiwBfn56WG6', 'Admin', 'admin', 1)
 ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- =======================================
@@ -85,7 +86,31 @@ CREATE TABLE IF NOT EXISTS `inv_products` (
   FOREIGN KEY (`category_id`) REFERENCES `inv_categories`(`id`) ON DELETE SET NULL,
   FOREIGN KEY (`supplier_id`) REFERENCES `inv_suppliers`(`id`) ON DELETE SET NULL,
   FOREIGN KEY (`warehouse_id`) REFERENCES `inv_warehouses`(`id`) ON DELETE SET NULL,
-  INDEX `idx_products_expiry` (`expiry_date`)
+  INDEX `idx_products_expiry` (`expiry_date`),
+  INDEX `idx_products_sku` (`sku`),
+  INDEX `idx_products_barcode` (`barcode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =======================================
+-- BATCH TRACKING (FEFO)
+-- =======================================
+CREATE TABLE IF NOT EXISTS `inv_batches` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `product_id` INT NOT NULL,
+  `batch_number` VARCHAR(100) NOT NULL,
+  `quantity` INT NOT NULL DEFAULT 0,
+  `initial_quantity` INT NOT NULL DEFAULT 0,
+  `manufacture_date` DATE DEFAULT NULL,
+  `expiry_date` DATE DEFAULT NULL,
+  `cost_price` DECIMAL(12,2) DEFAULT 0.00,
+  `warehouse_id` INT DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`product_id`) REFERENCES `inv_products`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`warehouse_id`) REFERENCES `inv_warehouses`(`id`) ON DELETE SET NULL,
+  INDEX `idx_batches_expiry` (`expiry_date`),
+  INDEX `idx_batches_product` (`product_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =======================================
@@ -94,15 +119,28 @@ CREATE TABLE IF NOT EXISTS `inv_products` (
 CREATE TABLE IF NOT EXISTS `inv_stock_movements` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `product_id` INT NOT NULL,
-  `type` ENUM('inbound', 'outbound', 'adjustment') NOT NULL,
+  `batch_id` INT DEFAULT NULL,
+  `type` ENUM(
+    'restock', 'transfer_in', 'initial',
+    'transfer_out', 'write_off', 'damage', 'expired', 'loss', 'sample', 'return_out',
+    'adjustment'
+  ) NOT NULL,
+  `reference` VARCHAR(50) DEFAULT NULL,
   `quantity` INT NOT NULL,
-  `reference` VARCHAR(255) DEFAULT NULL,
+  `reason` VARCHAR(500) DEFAULT NULL,
+  `previous_quantity` INT DEFAULT NULL,
+  `new_quantity` INT DEFAULT NULL,
+  `unit_cost` DECIMAL(12,2) DEFAULT NULL,
   `notes` TEXT DEFAULT NULL,
   `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`product_id`) REFERENCES `inv_products`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`created_by`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`batch_id`) REFERENCES `inv_batches`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`created_by`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_sm_product` (`product_id`),
+  INDEX `idx_sm_type` (`type`),
+  INDEX `idx_sm_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =======================================
@@ -119,7 +157,9 @@ CREATE TABLE IF NOT EXISTS `inv_purchase_orders` (
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`supplier_id`) REFERENCES `inv_suppliers`(`id`),
-  FOREIGN KEY (`created_by`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`created_by`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_po_supplier` (`supplier_id`),
+  INDEX `idx_po_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =======================================
@@ -148,7 +188,9 @@ CREATE TABLE IF NOT EXISTS `inv_activity_log` (
   `details` TEXT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`user_id`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`user_id`) REFERENCES `inv_users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_activity_entity` (`entity_type`, `entity_id`),
+  INDEX `idx_activity_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =======================================
@@ -163,20 +205,6 @@ CREATE TABLE IF NOT EXISTS `inv_notifications` (
   `is_read` TINYINT(1) DEFAULT 0,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`user_id`) REFERENCES `inv_users`(`id`) ON DELETE CASCADE
+  FOREIGN KEY (`user_id`) REFERENCES `inv_users`(`id`) ON DELETE CASCADE,
+  INDEX `idx_notifications_user` (`user_id`, `is_read`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- =======================================
--- INDEXES
--- =======================================
-CREATE INDEX `idx_inv_products_category` ON `inv_products`(`category_id`);
-CREATE INDEX `idx_inv_products_supplier` ON `inv_products`(`supplier_id`);
-CREATE INDEX `idx_inv_products_warehouse` ON `inv_products`(`warehouse_id`);
-CREATE INDEX `idx_inv_products_sku` ON `inv_products`(`sku`);
-CREATE INDEX `idx_inv_products_barcode` ON `inv_products`(`barcode`);
-CREATE INDEX `idx_inv_stock_movements_product` ON `inv_stock_movements`(`product_id`);
-CREATE INDEX `idx_inv_stock_movements_type` ON `inv_stock_movements`(`type`);
-CREATE INDEX `idx_inv_purchase_orders_supplier` ON `inv_purchase_orders`(`supplier_id`);
-CREATE INDEX `idx_inv_purchase_orders_status` ON `inv_purchase_orders`(`status`);
-CREATE INDEX `idx_inv_activity_log_entity` ON `inv_activity_log`(`entity_type`, `entity_id`);
-CREATE INDEX `idx_inv_notifications_user` ON `inv_notifications`(`user_id`, `is_read`);

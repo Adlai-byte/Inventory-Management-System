@@ -14,7 +14,7 @@ export default defineConfig({
   workers: 1,        // serial — shares one session, avoids rate-limit issues
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://127.0.0.1:3010",
     // All test contexts start pre-authenticated as admin
     storageState: authFile,
     trace: "on-first-retry",
@@ -26,7 +26,7 @@ export default defineConfig({
   },
   webServer: {
     command: "npm.cmd run dev",
-    url: "http://127.0.0.1:3000",
+    url: "http://127.0.0.1:3010",
     reuseExistingServer: true,
     timeout: 120_000,
   },

@@ -1,5 +1,5 @@
 // =======================================
-// BASTISTIL Inventory System Types
+// BATISTIL Inventory System Types
 // BIR-Compliant - No Sales Tracking
 // =======================================
 
@@ -90,15 +90,36 @@ export interface Product {
 }
 
 // =======================================
+// Batch Types
+// =======================================
+export interface Batch {
+  id: number;
+  product_id: number;
+  batch_number: string;
+  quantity: number;
+  initial_quantity: number;
+  manufacture_date: string | null;
+  expiry_date: string | null;
+  cost_price: number;
+  warehouse_id: number | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  product_name?: string;
+  product_sku?: string;
+}
+
+// =======================================
 // Stock Movement Types (BIR-Compliant)
 // =======================================
 export type MovementType =
   | "restock"        // Items received from supplier
   | "transfer_in"    // Items received from another location
   | "transfer_out"   // Items sent to another location
-  | "damage"         // Items damaged/broken
-  | "expired"        // Items expired and disposed
-  | "loss"           // Items lost/stolen
+  | "write_off"      // Items written off (damaged/expired/lost)
+  | "damage"         // Items damaged/broken (legacy)
+  | "expired"        // Items expired and disposed (legacy)
+  | "loss"           // Items lost/stolen (legacy)
   | "adjustment"     // Count correction from stock take
   | "sample"         // Items used as samples
   | "return_out"     // Items returned to supplier
@@ -107,7 +128,7 @@ export type MovementType =
 // Types that increase stock
 export const INBOUND_TYPES: MovementType[] = ["restock", "transfer_in", "initial"];
 // Types that decrease stock
-export const OUTBOUND_TYPES: MovementType[] = ["transfer_out", "damage", "expired", "loss", "sample", "return_out"];
+export const OUTBOUND_TYPES: MovementType[] = ["transfer_out", "write_off", "damage", "expired", "loss", "sample", "return_out"];
 // Types that set absolute quantity
 export const ADJUSTMENT_TYPES: MovementType[] = ["adjustment"];
 
@@ -121,10 +142,12 @@ export interface StockMovement {
   new_quantity: number | null;
   unit_cost: number | null;
   notes: string | null;
+  batch_id: number | null;
   created_by: number | null;
   created_at: string;
   // Joined fields
   product?: Product;
+  batch?: Batch;
   product_name?: string;
   product_sku?: string;
   created_by_name?: string;
@@ -221,6 +244,7 @@ export interface ActivityLog {
   created_at: string;
   // Joined fields
   profile?: Profile;
+  user_name?: string;
 }
 
 // =======================================

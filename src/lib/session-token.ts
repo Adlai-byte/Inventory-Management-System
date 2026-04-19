@@ -3,6 +3,7 @@ export interface SessionUser {
   username: string;
   full_name: string | null;
   role: "admin" | "manager" | "staff";
+  must_change_password?: boolean;
 }
 
 interface SessionTokenPayload extends SessionUser {

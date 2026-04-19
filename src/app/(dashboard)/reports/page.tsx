@@ -72,9 +72,9 @@ export default function ReportsPage() {
 
   const [showCostValue, setShowCostValue] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("reports_show_cost") !== "false";
+      return localStorage.getItem("reports_show_cost") === "true";
     }
-    return true;
+    return false;
   });
 
   const toggleCostValue = () => {
@@ -117,7 +117,12 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports & Analytics" description="Inventory insights and analytics" icon={BarChart3} />
+      <PageHeader 
+        title="Reports & Analytics" 
+        description="Inventory insights and analytics" 
+        helpText="Generate and export audit-ready inventory reports. This module provides insights into your inventory valuation (based on purchase cost), low stock identification, and outbound movement trends. All reports are designed to assist with BIR compliance and internal inventory reconciliation. You can export data to PDF or CSV using the download icons in each section."
+        icon={BarChart3} 
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>

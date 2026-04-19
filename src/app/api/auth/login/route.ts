@@ -9,6 +9,7 @@ interface LoginUserRow {
   password_hash: string;
   full_name: string | null;
   role: "admin" | "manager" | "staff";
+  must_change_password: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const sanitizedUsername = username.trim().toLowerCase();
 
     const user = await queryOne<LoginUserRow>(
-      "SELECT id, username, password_hash, full_name, role FROM inv_users WHERE LOWER(username) = ?",
+      "SELECT id, username, password_hash, full_name, role, must_change_password FROM inv_users WHERE LOWER(username) = ?",
       [sanitizedUsername]
     );
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role },
+      must_change_password: !!user.must_change_password,
     });
   } catch (error: unknown) {
     console.error("Login error:", error);

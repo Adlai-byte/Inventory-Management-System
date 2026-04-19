@@ -30,6 +30,7 @@ export type ActionType =
   | "restock"
   | "transfer_in"
   | "transfer_out"
+  | "write_off"
   | "damage"
   | "expired"
   | "loss"
@@ -68,12 +69,13 @@ export function formatLogDetails(action: ActionType, entity: string, name: strin
     updated: `Updated ${entity}: ${name}`,
     deleted: `Deleted ${entity}: ${name}`,
     restock: `Restocked ${entity}: ${name}`,
+    transfer_in: `Transferred in ${entity}: ${name}`,
+    transfer_out: `Dispatched ${entity}: ${name}`,
+    write_off: `Written off ${entity}: ${name}`,
     damage: `Recorded damage for ${entity}: ${name}`,
     expired: `Marked expired ${entity}: ${name}`,
     loss: `Recorded loss for ${entity}: ${name}`,
     adjustment: `Adjusted stock for ${entity}: ${name}`,
-    transfer_in: `Transferred in ${entity}: ${name}`,
-    transfer_out: `Transferred out ${entity}: ${name}`,
     sample: `Recorded sample for ${entity}: ${name}`,
     return_out: `Returned ${entity}: ${name}`,
   };

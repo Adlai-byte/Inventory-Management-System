@@ -53,17 +53,18 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const session = await getSession();
   if (!session) return null;
 
-  const user = await queryOne<SessionUser>(
-    "SELECT id, username, full_name, role FROM inv_users WHERE id = ?",
+  const result = await queryOne<{ id: number; username: string; full_name: string; role: string; must_change_password: number }>(
+    "SELECT id, username, full_name, role, must_change_password FROM inv_users WHERE id = ?",
     [session.id]
   );
-  if (!user) return null;
+  if (!result) return null;
 
   return {
-    id: user.id,
-    username: user.username,
-    full_name: user.full_name,
-    role: user.role,
+    id: result.id,
+    username: result.username,
+    full_name: result.full_name,
+    role: result.role as "admin" | "staff" | "manager",
+    must_change_password: !!result.must_change_password,
   };
 }
 

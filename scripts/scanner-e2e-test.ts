@@ -53,7 +53,7 @@ async function performTransactions(page: any, movement: typeof MOVEMENT_TYPES[nu
 test.describe("Scanner stress test", () => {
   test("execute 10 transactions for each movement type and verify reports", async ({ page }) => {
     // --- Login ---
-    await page.goto("http://localhost:3000/login");
+    await page.goto("http://localhost:3010/login");
     await page.fill("input[name='email']", ADMIN_EMAIL);
     await page.fill("input[name='password']", ADMIN_PASSWORD);
     await page.click("button[type='submit']");
@@ -61,7 +61,7 @@ test.describe("Scanner stress test", () => {
     await expect(page).toHaveURL(/\/dashboard/);
 
     // --- Navigate to Scanner ---
-    await page.goto("http://localhost:3000/scanner");
+    await page.goto("http://localhost:3010/scanner");
 
     // Perform the series of transactions
     for (const movement of MOVEMENT_TYPES) {
@@ -69,7 +69,7 @@ test.describe("Scanner stress test", () => {
     }
 
     // --- Verify Reports Page ---
-    await page.goto("http://localhost:3000/reports");
+    await page.goto("http://localhost:3010/reports");
     // Wait for reports to load
     await page.waitForLoadState("networkidle");
     // Capture a screenshot for manual verification

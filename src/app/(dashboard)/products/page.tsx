@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { formatCurrency, generateSKU } from "@/lib/utils";
+import { formatCurrency, generateSKU, cn } from "@/lib/utils";
 import { getExpiryStatus, formatDaysUntilExpiry } from "@/lib/expiry";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Package, Plus, Search, MoreHorizontal, Pencil, Trash2, Loader2, AlertTriangle, Download, FileDown, Upload } from "lucide-react";
-import type { Product, Category, Supplier } from "@/lib/types";
+import { Package, Plus, Search, MoreHorizontal, Pencil, Trash2, Loader2, AlertTriangle, Download, FileDown, Upload, Printer, Tag, Calendar, ScanLine } from "lucide-react";
+import type { Product, Category, Supplier, Batch } from "@/lib/types";
 import { Pagination } from "@/components/ui/pagination";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UNITS_OF_MEASURE, generateCSV, downloadCSV, getExportFilename } from "@/lib/product-export";
+import PrintLabels, { type LabelProduct } from "@/components/labels/print-labels";
+import { BarcodeScanDialog } from "@/components/barcode-scan-dialog";
 
 interface ProductsResponse {
   data: Product[];
@@ -27,6 +29,9 @@ interface ProductsResponse {
 }
 
 export default function ProductsPage() {
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -53,6 +58,33 @@ export default function ProductsPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const [labelPrintOpen, setLabelPrintOpen] = useState(false);
+  const [scanTarget, setScanTarget] = useState<"sku" | "barcode" | null>(null);
+  const [labelProducts, setLabelProducts] = useState<LabelProduct[]>([]);
+  const [labelType, setLabelType] = useState<"shelf" | "price" | "small">("shelf");
+  
+  // Batch details
+  const [selectedProductForBatches, setSelectedProductForBatches] = useState<Product | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batchesDialogOpen, setBatchesDialogOpen] = useState(false);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+
+  const viewBatches = async (product: Product) => {
+    setSelectedProductForBatches(product);
+    setBatchesDialogOpen(true);
+    setLoadingBatches(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/batches`);
+      if (res.ok) {
+        const data = await res.json();
+        setBatches(data);
+      }
+    } catch (err) {
+      toast.error("Failed to load batches");
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
 
   const [form, setForm] = useState({
     name: "", sku: "", description: "", category_id: "", supplier_id: "",
@@ -271,6 +303,18 @@ export default function ProductsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePrintLabels = (type: "shelf" | "price" | "small") => {
+    const selected = products.filter(p => selectedIds.has(p.id));
+    const targets = selected.length > 0 ? selected : products.slice(0, 20);
+    const labelData: LabelProduct[] = targets.map(p => ({
+      id: p.id, name: p.name, sku: p.sku, barcode: p.barcode, cost_price: p.cost_price, unit: p.unit,
+      category_name: p.category_name,
+    }));
+    setLabelProducts(labelData);
+    setLabelType(type);
+    setLabelPrintOpen(true);
+  };
+
   // =============================================
   // Bulk Delete — with confirmation dialog
   // =============================================
@@ -286,9 +330,16 @@ export default function ProductsPage() {
 
   const selectedProductsForDelete = products.filter(p => selectedIds.has(p.id));
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Products" description={`${pagination.total} products in inventory`} icon={Package}>
+      <PageHeader 
+        title="Products" 
+        description={`${pagination.total} products in inventory`} 
+        helpText="Manage your inventory catalog here. You can add new products, edit existing details, and track stock levels. Use the filters to find specific items by category, status, or expiry date. You can also bulk-print shelf labels and export your product list to CSV for external reporting or auditing."
+        icon={Package}
+      >
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => { setImportOpen(true); setImportFile(null); setImportResult(null); }} className="gap-2">
             <Upload className="h-4 w-4" />
@@ -307,7 +358,13 @@ export default function ProductsPage() {
           <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search products by name, SKU, or barcode..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" /></div>
           <Select value={filterCategory} onValueChange={(v: string | null) => setFilterCategory(v ?? "all")}>
-            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              {filterCategory !== "all" ? (
+                <span className="truncate">{categories.find(c => c.id.toString() === filterCategory)?.name || "Category"}</span>
+              ) : (
+                <SelectValue placeholder="Category" />
+              )}
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
               {categories.map((cat) => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>))}
@@ -349,6 +406,9 @@ export default function ProductsPage() {
           <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center justify-between">
             <span className="text-sm font-medium">{selectedIds.size} selected</span>
             <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => handlePrintLabels("shelf")}>
+                <Printer className="h-4 w-4 mr-1" /> Print Labels
+              </Button>
               <Button size="sm" variant="outline" onClick={exportSelectedToCSV}>
                 <Download className="h-4 w-4 mr-1" /> Export CSV
               </Button>
@@ -400,6 +460,7 @@ export default function ProductsPage() {
                 <DropdownMenuTrigger className="h-10 w-10 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-accent"><MoreHorizontal className="h-5 w-5 sm:h-4 sm:w-4" /></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => openEditDialog(product)}><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => viewBatches(product)}><Tag className="mr-2 h-4 w-4" />View Batches</DropdownMenuItem>
                   <DropdownMenuItem variant="destructive" onClick={() => { setDeletingProduct(product); setDeleteDialogOpen(true); }}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -426,14 +487,46 @@ export default function ProductsPage() {
           {/* Row 1: Name + SKU */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2"><Label htmlFor="name">Product Name *</Label><Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Enter product name" className="w-full h-11" /></div>
-            <div className="space-y-2"><Label htmlFor="sku">SKU *</Label><Input id="sku" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="Auto-generated" className="font-mono w-full h-11" /></div>
+            <div className="space-y-2">
+              <Label htmlFor="sku">SKU *</Label>
+              <div className="flex gap-2">
+                <Input id="sku" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="Auto-generated" className="font-mono h-11" />
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" title="Scan barcode into SKU" onClick={() => setScanTarget("sku")}>
+                  <ScanLine className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
           {/* Row 2: Description */}
           <div className="space-y-2"><Label htmlFor="description">Description</Label><Textarea id="description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Product description..." rows={2} className="resize-none w-full" /></div>
           {/* Row 3: Category + Supplier */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Category</Label><Select value={form.category_id || ""} onValueChange={(v: string | null) => setForm({ ...form, category_id: v ?? "" })}><SelectTrigger className="w-full h-11"><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{categories.map((cat) => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>))}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Supplier</Label><Select value={form.supplier_id || ""} onValueChange={(v: string | null) => setForm({ ...form, supplier_id: v ?? "" })}><SelectTrigger className="w-full h-11"><SelectValue placeholder="Select supplier" /></SelectTrigger><SelectContent>{suppliers.map((s) => (<SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>))}</SelectContent></Select></div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={form.category_id || ""} onValueChange={(v: string | null) => setForm({ ...form, category_id: v ?? "" })}>
+                <SelectTrigger className="w-full h-11">
+                  {form.category_id ? (
+                    <span className="truncate">{categories.find(c => c.id.toString() === form.category_id)?.name || "Select category"}</span>
+                  ) : (
+                    <SelectValue placeholder="Select category" />
+                  )}
+                </SelectTrigger>
+                <SelectContent>{categories.map((cat) => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>))}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Supplier</Label>
+              <Select value={form.supplier_id || ""} onValueChange={(v: string | null) => setForm({ ...form, supplier_id: v ?? "" })}>
+                <SelectTrigger className="w-full h-11">
+                  {form.supplier_id ? (
+                    <span className="truncate">{suppliers.find(s => s.id.toString() === form.supplier_id)?.name || "Select supplier"}</span>
+                  ) : (
+                    <SelectValue placeholder="Select supplier" />
+                  )}
+                </SelectTrigger>
+                <SelectContent>{suppliers.map((s) => (<SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>))}</SelectContent>
+              </Select>
+            </div>
           </div>
           {/* Row 4: Cost Price + Quantity + Unit */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -449,7 +542,15 @@ export default function ProductsPage() {
           </div>
           {/* Row 6: Barcode + Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Barcode</Label><Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} placeholder="Scan or enter barcode" className="w-full h-11" /></div>
+            <div className="space-y-2">
+              <Label>Barcode</Label>
+              <div className="flex gap-2">
+                <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} placeholder="Scan or enter barcode" className="h-11" />
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" title="Scan barcode" onClick={() => setScanTarget("barcode")}>
+                  <ScanLine className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
             <div className="space-y-2"><Label>Status</Label><Select value={form.status || ""} onValueChange={(v: string | null) => setForm({ ...form, status: v ?? "active" })}><SelectTrigger className="w-full h-11"><SelectValue placeholder="Select status" /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="discontinued">Discontinued</SelectItem></SelectContent></Select></div>
           </div>
           {/* Row 7: Expiry + Manufacture Date + Lot Number */}
@@ -552,6 +653,104 @@ export default function ProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Print Labels Modal */}
+      {labelPrintOpen && (
+        <PrintLabels
+          products={labelProducts}
+          labelType={labelType}
+          onClose={() => setLabelPrintOpen(false)}
+        />
+      )}
+
+      {/* Batches Dialog */}
+      <Dialog open={batchesDialogOpen} onOpenChange={setBatchesDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-primary" />
+              Batch History: {selectedProductForBatches?.name}
+            </DialogTitle>
+            <DialogDescription>
+              View individual batches and their respective expiry dates for this product.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {loadingBatches ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                <p>Loading batches...</p>
+              </div>
+            ) : batches.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+                <Package className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                <p>No active batches found for this product.</p>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Batch #</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead>Expiry Date</TableHead>
+                      <TableHead>Mfg Date</TableHead>
+                      <TableHead className="text-right">Cost Price</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {batches.map((batch) => (
+                      <TableRow key={batch.id}>
+                        <TableCell className="font-mono font-medium">{batch.batch_number}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={batch.quantity <= 10 ? "destructive" : "secondary"} className="font-mono">
+                            {batch.quantity} / {batch.initial_quantity}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {batch.expiry_date ? (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-3 w-3 text-muted-foreground" />
+                              <span className={cn(
+                                "text-sm",
+                                getExpiryStatus(batch.expiry_date) === "expired" ? "text-destructive font-bold" :
+                                getExpiryStatus(batch.expiry_date) === "critical" ? "text-amber-600 font-semibold" : ""
+                              )}>
+                                {new Date(batch.expiry_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {formatCurrency(batch.cost_price)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setBatchesDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <BarcodeScanDialog
+        open={scanTarget !== null}
+        onOpenChange={(open) => { if (!open) setScanTarget(null); }}
+        title={scanTarget === "sku" ? "Scan into SKU" : "Scan Barcode"}
+        onScan={(code) => {
+          if (scanTarget === "sku") setForm((f) => ({ ...f, sku: code }));
+          else if (scanTarget === "barcode") setForm((f) => ({ ...f, barcode: code }));
+          setScanTarget(null);
+        }}
+      />
     </div>
   );
 }

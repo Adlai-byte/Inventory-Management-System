@@ -56,7 +56,10 @@ export default function AlertsPage() {
   const [creatingPo, setCreatingPo] = useState(false);
   const [suppliers, setSuppliers] = useState<{id: number; name: string}[]>([]);
 
+  const [hasMounted, setHasMounted] = useState(false);
+
   useEffect(() => {
+    setHasMounted(true);
     fetch("/api/suppliers?limit=1000").then(r => r.json()).then(d => {
       if (d.data) setSuppliers(d.data);
     }).catch(() => {});
@@ -178,11 +181,14 @@ export default function AlertsPage() {
   const hasStockAlerts = (data?.outOfStock.length ?? 0) > 0 || (data?.lowStock.length ?? 0) > 0;
   const hasExpiryAlerts = (data?.expired.length ?? 0) > 0 || (data?.expiring.length ?? 0) > 0;
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Alerts"
         description="Inventory alerts and notifications"
+        helpText="Monitor critical inventory notifications here. This page highlights low stock levels, out-of-stock items, and upcoming product expirations. You can select multiple low-stock items and click 'Create Purchase Order' to quickly start a restocking request with a supplier."
         icon={AlertTriangle}
       />
 

@@ -12,7 +12,7 @@ function makeRequest(
   path: string,
   options?: { sessionToken?: string }
 ): NextRequest {
-  const url = new URL(path, "http://localhost:3000");
+  const url = new URL(path, "http://localhost:3010");
   const headers = new Headers();
   if (options?.sessionToken) {
     headers.set("Cookie", `inv_session=${options.sessionToken}`);

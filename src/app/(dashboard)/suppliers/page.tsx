@@ -31,6 +31,11 @@ export default function SuppliersPage() {
   const [deleting, setDeleting] = useState<Supplier | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "" });
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const exportToCSV = () => {
     const headers = ["Name", "Email", "Phone", "Address"];
@@ -102,9 +107,16 @@ export default function SuppliersPage() {
     toast.success("Supplier deleted"); setDeleteDialogOpen(false); setDeleting(null); fetchData();
   };
 
+  if (!hasMounted) return null;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Suppliers" description={`${pagination.total} suppliers`} icon={Users}>
+      <PageHeader 
+        title="Suppliers" 
+        description={`${pagination.total} suppliers`} 
+        helpText="Manage your supplier relationships and contact information here. This data is linked to your products and purchase orders, allowing you to quickly identify which supplier provides specific items and track their delivery history. You can also export the list for external contact management."
+        icon={Users}
+      >
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportToCSV} className="gap-2"><Download className="h-4 w-4" />Export</Button>
           <Button onClick={() => { setEditing(null); setForm({ name: "", email: "", phone: "", address: "" }); setDialogOpen(true); }} className="gap-2 h-11 text-base px-6"><Plus className="h-5 w-5" /> Add Supplier</Button>

@@ -5,8 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
  * Add specific domains here for production use.
  */
 const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
+  "http://localhost:3010",
+  "http://127.0.0.1:3010",
 ];
 
 /**

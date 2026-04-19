@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
-import { ClipboardCheck, Plus, Search, Loader2, Eye, CheckCircle, XCircle, ChevronLeft } from "lucide-react";
+import { ClipboardCheck, Plus, Search, Loader2, Eye, CheckCircle, XCircle, ChevronLeft, Scan, Package, Camera, Keyboard } from "lucide-react";
 import { generateStockTakeName } from "@/lib/stock-take-utils";
 
 interface StockTakeSummary {
@@ -69,6 +69,15 @@ export default function StockTakesPage() {
 
   // Complete dialog
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+
+  // Scanner mode state
+  const [scannerMode, setScannerMode] = useState(false);
+  const [query, setQuery] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [lastScanned, setLastScanned] = useState<{ id: number; name: string; sku: string; quantity: number } | null>(null);
+  const [cart, setCart] = useState<Array<{ id: number; name: string; sku: string; quantity: number; scanQty: number }>>([]);
+  const [inputMode, setInputMode] = useState<"keyboard" | "camera">("camera");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
@@ -189,6 +198,88 @@ export default function StockTakesPage() {
     }
   };
 
+  // Scanner functions
+  const handleScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    handleScanResult(query.trim());
+    setQuery("");
+  };
+
+  const handleScanResult = async (barcode: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/scanner/lookup?q=${encodeURIComponent(barcode)}`);
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data) {
+          addToCart({ id: data.id, name: data.name, sku: data.sku, quantity: data.quantity });
+        } else {
+          toast.error("Product not found");
+        }
+      } else {
+        toast.error("Scan error");
+      }
+    } catch {
+      toast.error("Failed to lookup product");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addToCart = (product: { id: number; name: string; sku: string; quantity: number }) => {
+    setLastScanned(product);
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        return prev.map(item => item.id === product.id ? { ...item, scanQty: item.scanQty + 1 } : item);
+      }
+      return [...prev, { ...product, scanQty: product.quantity }];
+    });
+    toast.success(`Added ${product.name} to count`);
+  };
+
+  const handleSaveCount = async () => {
+    if (cart.length === 0) { toast.error("No items to save"); return; }
+    setLoading(true);
+    try {
+      // Create stock take with scanned items
+      const res = await fetch("/api/stock-takes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          notes: form.notes || null,
+          items: cart.map((item) => ({
+            product_id: item.id,
+            counted_quantity: item.scanQty,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      // Complete immediately
+      const completeRes = await fetch(`/api/stock-takes/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete" }),
+      });
+      const completeData = await completeRes.json();
+      if (!completeRes.ok) throw new Error(completeData.error);
+      
+      toast.success("Stock take completed");
+      setCart([]);
+      setScannerMode(false);
+      setForm({ name: generateStockTakeName(), notes: "" });
+      fetchStockTakes();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save count");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredItems = takeItems.filter(item =>
     !itemSearch || item.product_name?.toLowerCase().includes(itemSearch.toLowerCase()) || item.product_sku?.toLowerCase().includes(itemSearch.toLowerCase())
   );
@@ -288,12 +379,104 @@ export default function StockTakesPage() {
   // =============================================
   // List View: All stock takes
   // =============================================
+  
+  // Scanner Mode UI
+  if (scannerMode) {
+    return (
+      <div className="space-y-6">
+        <PageHeader 
+          title="Quick Stock Count" 
+          description="Scan products to count inventory"
+          icon={ClipboardCheck}
+        >
+          <Button variant="outline" onClick={() => { setScannerMode(false); setCart([]); }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+        </PageHeader>
+
+        <Card><CardContent className="p-4 space-y-4">
+          {/* Input Mode Toggle */}
+          <div className="flex gap-3">
+            <Button variant={inputMode === "keyboard" ? "default" : "outline"} onClick={() => setInputMode("keyboard")} className="flex-1 gap-2 h-12">
+              <Keyboard className="h-5 w-5" /> Manual
+            </Button>
+            <Button variant={inputMode === "camera" ? "default" : "outline"} onClick={() => setInputMode("camera")} className="flex-1 gap-2 h-12">
+              <Camera className="h-5 w-5" /> Camera
+            </Button>
+          </div>
+
+          {inputMode === "keyboard" ? (
+            <form onSubmit={handleScan} className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <Scan className="h-5 w-5" />
+              </div>
+              <Input
+                ref={inputRef}
+                placeholder="Enter barcode..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-10 h-14 text-lg"
+              />
+            </form>
+          ) : (
+            <div className="text-center p-4 border-2 border-dashed rounded-lg">
+              <Camera className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">Camera scanning ready</p>
+            </div>
+          )}
+
+          {/* Scanned Items */}
+          {cart.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold">Scanned Items: {cart.length}</span>
+                <Button variant="ghost" size="sm" onClick={() => setCart([])}>Clear All</Button>
+              </div>
+              {cart.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div>
+                    <div className="font-medium">{item.name}</div>
+                    <div className="text-sm text-muted-foreground">SKU: {item.sku}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCart(prev => prev.map(i => i.id === item.id ? { ...i, scanQty: Math.max(0, i.scanQty - 1) } : i))}>-</Button>
+                    <span className="w-12 text-center font-semibold">{item.scanQty}</span>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCart(prev => prev.map(i => i.id === item.id ? { ...i, scanQty: i.scanQty + 1 } : i))}>+</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent></Card>
+
+        {cart.length > 0 && (
+          <div className="flex gap-2">
+            <Button onClick={handleSaveCount} disabled={loading} className="flex-1 gap-2 h-14 text-lg">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
+              Save Count ({cart.reduce((sum, i) => sum + i.scanQty, 0)} items)
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Stock Takes" description="Physical inventory counts" icon={ClipboardCheck}>
-        <Button onClick={() => { setForm({ name: generateStockTakeName(), notes: "" }); setCreateDialogOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" /> New Stock Take
-        </Button>
+      <PageHeader 
+        title="Stock Takes" 
+        description="Physical inventory counts" 
+        helpText="Conduct physical inventory counts to ensure system accuracy. Create a new stock take session, count your items, and finalize the session to automatically generate stock adjustments for any variances found. This process helps identify shrinkage, loss, or data entry errors."
+        icon={ClipboardCheck}
+      >
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setForm({ name: generateStockTakeName(), notes: "" }); setScannerMode(true); }} className="gap-2">
+            <Scan className="h-4 w-4" /> Quick Count
+          </Button>
+          <Button onClick={() => { setForm({ name: generateStockTakeName(), notes: "" }); setCreateDialogOpen(true); }} className="gap-2">
+            <Plus className="h-4 w-4" /> New Stock Take
+          </Button>
+        </div>
       </PageHeader>
 
       <Card><CardContent className="p-4">

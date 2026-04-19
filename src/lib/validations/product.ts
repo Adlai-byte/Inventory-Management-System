@@ -61,6 +61,7 @@ const MOVEMENT_TYPES: MovementType[] = [
   "restock",
   "transfer_in", 
   "transfer_out",
+  "write_off",
   "damage",
   "expired",
   "loss",

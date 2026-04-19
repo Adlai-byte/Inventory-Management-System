@@ -76,7 +76,12 @@ export default function ActivityLogPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Activity Log" description={`${pagination.total} audit events recorded`} icon={Activity} />
+      <PageHeader 
+        title="Activity Log" 
+        description={`${pagination.total} audit events recorded`} 
+        helpText="The system audit trail records every significant action performed by users. This includes product creation, stock movements, and system configuration changes. Each log entry includes the timestamp and the user who performed the action for full accountability and security auditing."
+        icon={Activity} 
+      />
 
       <Card><CardContent className="p-4">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -121,9 +126,14 @@ export default function ActivityLogPage() {
                     <div className="flex-1 bg-accent/30 rounded-lg p-4 hover:bg-accent/50 transition-colors">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <Badge className={`${actionClass} text-[10px] capitalize`}>{activity.action}</Badge>
                             <Badge variant="outline" className="text-[10px] capitalize">{activity.entity_type.replace(/_/g, " ")}</Badge>
+                            {activity.user_name && (
+                              <Badge variant="secondary" className="text-[10px] bg-primary/5 text-primary border-primary/10">
+                                {activity.user_name}
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-sm">{activity.details}</p>
                         </div>

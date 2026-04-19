@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import dynamicImport from "next/dynamic";
+import { useEffect, useState } from "react";
+
+const HeaderDate = dynamicImport(
+  () => import("@/components/header-date").then((m) => m.HeaderDate),
+  { ssr: false }
+);
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -108,16 +114,6 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const dateString = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-    []
-  );
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -125,7 +121,13 @@ export default function DashboardLayout({
         const res = await fetch("/api/auth/me");
         if (res.ok) {
           const data = await res.json();
-          if (data.user) setProfile(data.user);
+          if (data.user) {
+            if (data.user.must_change_password) {
+              router.replace("/change-password");
+              return;
+            }
+            setProfile(data.user);
+          }
         }
       } catch {}
     };
@@ -161,7 +163,7 @@ export default function DashboardLayout({
     >
       {!collapsed && (
         <span className="font-bold text-base tracking-tight">
-          BASTISTIL MINI MART
+          BATISTIL MINI MART
         </span>
       )}
       {collapsed && (
@@ -257,9 +259,7 @@ export default function DashboardLayout({
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="hidden sm:block">
-                <h2 className="text-sm font-medium text-muted-foreground">
-                  {dateString}
-                </h2>
+                <HeaderDate />
               </div>
             </div>
 
@@ -281,13 +281,6 @@ export default function DashboardLayout({
 
         <main className="p-4 lg:p-6">{children}</main>
 
-        <Link
-          href="/scanner"
-          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center z-40"
-          title="Open Scanner"
-        >
-          <ScanLine className="h-5 w-5 sm:h-6 sm:w-6" />
-        </Link>
       </div>
     </div>
   );
