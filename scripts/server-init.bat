@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM ==========================================
 REM BASTISTIL Inventory - Server Init Script
 REM ==========================================
@@ -122,20 +123,25 @@ call mkcert -install
 
 if not exist "certs" mkdir certs
 
-REM Detect LAN IP (first non-loopback IPv4)
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4" ^| findstr /v "127.0.0.1"') do (
-    set RAW_IP=%%a
-    goto :ip_found
-)
-:ip_found
-set LAN_IP=%RAW_IP: =%
+REM Detect the LAN IP of the adapter with a default gateway
+REM (skips virtual adapters from WSL, Hyper-V, VirtualBox, Docker)
+for /f "tokens=*" %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0detect-lan-ip.ps1"') do set LAN_IP=%%i
 
-if "%LAN_IP%"=="" (
-    echo   Could not auto-detect LAN IP. Using localhost only.
+if "!LAN_IP!"=="" (
+    echo   Could not auto-detect LAN IP.
+    set /p LAN_IP="Enter the server PC's LAN IP manually (e.g. 192.168.0.101): "
+) else (
+    echo   Detected LAN IP: !LAN_IP!
+    set /p CONFIRM_IP="Use this IP? (Enter to confirm, or type a different IP): "
+    if not "!CONFIRM_IP!"=="" set LAN_IP=!CONFIRM_IP!
+)
+
+if "!LAN_IP!"=="" (
+    echo   No LAN IP provided. Generating cert for localhost only.
     call mkcert -key-file certs/key.pem -cert-file certs/cert.pem localhost 127.0.0.1
 ) else (
-    echo   Detected LAN IP: %LAN_IP%
-    call mkcert -key-file certs/key.pem -cert-file certs/cert.pem localhost 127.0.0.1 %LAN_IP%
+    echo   Generating certificate for localhost, 127.0.0.1, !LAN_IP!...
+    call mkcert -key-file certs/key.pem -cert-file certs/cert.pem localhost 127.0.0.1 !LAN_IP!
 )
 
 if %errorlevel% neq 0 (
@@ -163,15 +169,15 @@ echo ============================================================
 echo   DONE! Server is running.
 echo ============================================================
 echo.
-if not "%LAN_IP%"=="" (
+if not "!LAN_IP!"=="" (
     echo   Access from this PC:  https://localhost:3010
-    echo   Access from phone:    https://%LAN_IP%:3010
+    echo   Access from phone:    https://!LAN_IP!:3010
 ) else (
     echo   Access from this PC:  https://localhost:3010
 )
 echo.
 echo   On your phone (first time only):
-echo     1. Open https://%LAN_IP%:3010/ca.pem in the phone browser
+echo     1. Open https://!LAN_IP!:3010/ca.pem in the phone browser
 echo        (tap Advanced / Show Details then Proceed/Visit anyway)
 echo     2. Install the downloaded certificate:
 echo        iPhone: Settings ^> General ^> VPN ^& Device Management ^> BATISTIL CA ^> Install
